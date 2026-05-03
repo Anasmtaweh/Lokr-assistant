@@ -17,9 +17,11 @@
 
 ## 🎯 What Is Lokr Assistant?
 
-Lokr Assistant is a **multi-agent AI framework** that acts as a senior engineering copilot. Unlike generic AI coding tools, it's deeply integrated with [**Lokr (dev-oracle)**](https://github.com/your-org/dev-oracle) — a Graph-RAG code intelligence engine that indexes your codebase into a dependency graph and vector database.
+Lokr Assistant is a **multi-agent AI framework** that acts as a senior engineering copilot. 
 
-This means every diagnosis, review, and deployment decision is **grounded in verified evidence** from your actual source code — not hallucinated guesses.
+Unlike generic AI coding tools, it's deeply integrated with **Lokr** — a deterministic Graph-RAG static analysis engine. By using **Tree-sitter** to map codebase dependencies into a **NetworkX** graph and indexing those nodes via **ChromaDB**, Lokr feeds the assistant with precise, execution-aware context paths. 
+
+This allows the assistant to ground every diagnosis, review, and deployment decision in verified evidence from your actual source code — eliminating hallucinations.
 
 ### The Problem
 
@@ -116,15 +118,18 @@ Lokr-assistant/
 ### Prerequisites
 
 - **Python 3.8+**
-- **Ollama** running locally with a model (e.g., `qwen2.5-coder:7b`)
+- **Ollama** (for local privacy) OR any **OpenAI-compatible API** (e.g., AMD GPU endpoints, Groq)
 - **Lokr (dev-oracle)** indexed on your project *(optional but recommended)*
 
 ### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/Lokr-assistant.git
+# Clone the repository with the Lokr engine bundled (Submodule)
+git clone --recurse-submodules https://github.com/Anasmtaweh/Lokr-assistant.git
 cd Lokr-assistant
+
+# (Optional) If you forgot --recurse-submodules, run:
+# git submodule update --init --recursive
 
 # Create virtual environment
 python -m venv venv
@@ -227,8 +232,11 @@ graph TD
 
 ## 🛠️ Tech Stack
 
-- **LLM Backend:** [Ollama](https://ollama.com) (local, private, no API keys needed)
-- **Code Intelligence:** [Lokr / dev-oracle](https://github.com/your-org/dev-oracle) (Graph-RAG with dependency analysis)
+- **LLM Backend:** Dual-support for [Ollama](https://ollama.com) (local/private) and **OpenAI-Compatible APIs** (e.g., AMD GPU endpoints) via UI toggle.
+- **Code Intelligence:** [Lokr](https://github.com/Anasmtaweh/lokr) (Bundled as a submodule in `lokr_core/`)
+  - **Parsing:** Tree-sitter (AST extraction for JS, TS, Python, etc.)
+  - **Vector Search:** ChromaDB (Semantic node retrieval)
+  - **Graph Engine:** NetworkX (Topological sorting and execution-path tracing)
 - **UI:** [Streamlit](https://streamlit.io) with real-time progress tracking
 - **Language:** Python 3.8+
 
