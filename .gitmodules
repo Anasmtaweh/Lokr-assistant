@@ -1,0 +1,3 @@
+[submodule "lokr_core"]
+	path = lokr_core
+	url = https://github.com/Anasmtaweh/lokr.git
