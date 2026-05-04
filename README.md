@@ -68,6 +68,11 @@ Every agent cross-references its findings against Lokr's dependency graph, file 
 - Cross-references the user's claims against Lokr's file summaries
 - Issues `SAFE_TO_DEPLOY`, `PROCEED_WITH_CAUTION`, or `NO_GO_FIX_BLOCKERS`
 
+### 🧠 Advanced Capabilities (Hackathon Special)
+- **Persistent Chat History:** The assistant now maintains context across multiple turns using `st.session_state`. Ask follow-up questions about complex logic without repeating yourself.
+- **DeepSeek R1 Support:** Native handling for Reasoning (CoT) models. Automatically isolates and handles `<think>` tags to ensure clean UI and reliable JSON parsing.
+- **Context Isolation:** Programmatic "Roleplay Blocker" that prevents the model from being distracted by system prompts found within user source code.
+
 ---
 
 ## 🏗️ Architecture

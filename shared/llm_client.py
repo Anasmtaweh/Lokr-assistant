@@ -73,9 +73,18 @@ class LLMClient:
                 data = response.json()
                 
                 if self.api_type == "openai":
-                    return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 else:
-                    return data.get("message", {}).get("content", "")
+                    content = data.get("message", {}).get("content", "")
+                
+                # Handle DeepSeek/Reasoning models by stripping <think> tags
+                if "<think>" in content and "</think>" in content:
+                    import re
+                    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                elif "<think>" in content: # If the model was cut off or only has opening tag
+                    content = content.split("<think>")[-1].split("</think>")[-1].strip()
+                    
+                return content
             except requests.exceptions.RequestException as e:
                 if attempt == 2:
                     print(f"Error communicating with LLM API after 3 attempts: {e}")

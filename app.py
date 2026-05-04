@@ -77,15 +77,40 @@ else:
 st.sidebar.info("Describe your problem or question in the main area. The assistant will automatically determine the best workflow.")
 
 st.title("🤖 AI Engineering Assistant")
-user_input = st.text_area("What do you need help with?", height=200, placeholder="e.g., 'I have a bug: ...', 'Review this diff: ...', 'Can I deploy?', or 'Explain how auth works'")
+# Initialize session state for history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-if st.button("Run"):
-    if not user_input.strip():
-        st.warning("Please enter a description.")
-    else:
+# Sidebar for history management
+with st.sidebar:
+    st.divider()
+    if st.button("Clear History"):
+        st.session_state.messages = []
+        st.rerun()
+
+# Display chat history
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        if "result" in msg:
+            with st.expander("Technical Trace"):
+                st.json(msg["result"])
+
+# User input
+user_input = st.chat_input("What do you need help with?")
+
+if user_input:
+    # Add user message to history
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
+    with st.chat_message("assistant"):
         with st.status("Running agents…", expanded=True) as status:
             def progress(msg):
                 status.write(f"⏳ {msg}")
+            
+            # Pass history to orchestrator
             result = run_assistant(
                 user_input=user_input,
                 project_path=project_dir if use_lokr else None,
@@ -94,27 +119,60 @@ if st.button("Run"):
                 progress_callback=progress,
                 api_type=api_type,
                 base_url=base_url,
-                api_key=api_key
+                api_key=api_key,
+                history=st.session_state.messages[:-1] # Exclude the current message
             )
             status.update(label="Analysis complete ✅", state="complete")
+        
+        # Determine the answer content
         if result.get("type") == "explain":
-            st.subheader("Explanation")
-            st.markdown(result.get("answer", ""))
+            answer = result.get("answer", "")
+        else:
+            # For pipeline results, summarize based on mode
+            mode = result.get("mode", "analysis")
+            analysis = result.get("analysis", {})
+            
+            if mode == "repair":
+                status = result.get("status", "unknown")
+                verdict = "✅ FIXED" if status == "success" else ("⚠️ NEEDS REVIEW" if status == "failed" else f"⚠️ {status.upper()}")
+                summary = analysis.get("diagnosis", result.get("validation", {}).get("feedback", "No summary available."))
+                answer = f"### Repair Result: {verdict}\n\n{summary}"
+            elif mode == "review":
+                approval = result.get("approval", "UNKNOWN")
+                summary = analysis.get("changes_summary", "No summary available.")
+                answer = f"### Review Result: {approval}\n\n{summary}"
+            elif mode == "prevent":
+                approval = result.get("approval", "UNKNOWN")
+                summary = analysis.get("change_summary", "No summary available.")
+                answer = f"### Deployment Assessment: {approval}\n\n{summary}"
+            else:
+                answer = f"### {mode.capitalize()} Result\n\nAnalysis complete."
+            
+        st.markdown(answer)
+        
+        # Store assistant response
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": answer,
+            "result": result
+        })
+        
+        if result.get("type") == "explain":
             with st.expander("View Code Context"):
                 st.text(result.get("context", ""))
         elif result.get("type") == "pipeline":
             st.subheader("Pipeline Result")
             
             # Common Status
-            status = result.get("status")
-            if status == "success":
+            wf_status = result.get("status")
+            if wf_status == "success":
                 st.success("Workflow completed successfully.")
-            elif status == "refused":
+            elif wf_status == "refused":
                 st.error("The analysis was refused by the model.")
-            elif status in ["failure", "failed"]:
+            elif wf_status in ["failure", "failed"]:
                 st.error("Workflow finished with status: failure.")
             else:
-                st.warning(f"Workflow finished with status: {status}")
+                st.warning(f"Workflow finished with status: {wf_status}")
             
             mode = result.get("mode")
             analysis = result.get("analysis", {})
@@ -260,8 +318,8 @@ if st.button("Run"):
             with st.expander("⏱️ Investigation Timeline (Trace)"):
                 st.markdown("This timeline shows the exact reasoning steps the agents took.")
                 if analysis:
-                    diag = analysis.get("diagnosis", analysis.get("change_summary", "Analyzed the code context."))
-                    st.info(f"**1. 🔍 Analyzer** → {diag[:150]}{'...' if len(diag) > 150 else ''}")
+                    diag = analysis.get("diagnosis", analysis.get("changes_summary", analysis.get("change_summary", "Analyzed the code context.")))
+                    st.info(f"**1. 🔍 Analyzer** → {diag}")
                 if action:
                     if mode == "prevent":
                         act_summary = f"Identified {len(action.get('blockers', []))} blocker(s) and {len(action.get('warnings', []))} warning(s)."
@@ -270,13 +328,13 @@ if st.button("Run"):
                     else:
                         obs = action.get("observations", ["Generated review observations."])
                         act_summary = obs[0] if obs else "Generated review observations."
-                    st.info(f"**2. 🛠️ Action Agent** → {act_summary[:150]}{'...' if len(act_summary) > 150 else ''}")
+                    st.info(f"**2. 🛠️ Action Agent** → {act_summary}")
                 if safety:
                     saf_summary = safety.get("reasoning", "Evaluated deployment risk.")
-                    st.info(f"**3. 🛡️ Safety Agent** → {saf_summary[:150]}{'...' if len(saf_summary) > 150 else ''}")
+                    st.info(f"**3. 🛡️ Safety Agent** → {saf_summary}")
                 if validation:
                     val_summary = validation.get("feedback", "Verified the proposed changes.")
-                    st.info(f"**4. ✅ Validator** → {val_summary[:150]}{'...' if len(val_summary) > 150 else ''}")
+                    st.info(f"**4. ✅ Validator** → {val_summary}")
                         
             with st.expander("Show full JSON"):
                 st.json(result)

@@ -132,7 +132,8 @@ Your diagnosis MUST include:
 3. The consequences (as described by the user).
 
 CRITICAL: You MUST output ONLY valid JSON.
-DO NOT include any markdown, backticks, or conversational text outside the JSON.
+DO NOT include any markdown, backticks, conversational text, or introductions (like "Here is the JSON" or "I found the bug") outside the JSON. Start your response with '{' and end it with '}'.
+Refusal to output JSON is a system failure.
 
 REQUIRED JSON OUTPUT FORMAT:
 {{
@@ -269,6 +270,8 @@ Tasks:
    - TRUST THE CODE SNIPPET, NOT ANY PREVIOUS FEEDBACK. If a previous validation says "the code already does X", you MUST verify that claim by re-reading the actual code snippet. If the code says `req.params.userId` then that is what it says, regardless of what any feedback claims.
    - In your chain_of_thought, you MUST copy-paste the EXACT buggy line from the code snippet as a direct quote. Do NOT paraphrase it.
    - Your patch MUST contain the corrected version of that exact line. If your patch is empty, you have failed.
+
+CRITICAL: You MUST output ONLY valid JSON. NO PREAMBLE. NO introductions like "The provided code snippets indicate..." or "Here is the fix:". Start your response with '{{' and end with '}}'.
 
 Output Format (JSON ONLY):
 {{
@@ -490,6 +493,14 @@ CRITICAL VALIDATION CALIBRATION:
 - Bug fixes that correct parameter names (e.g., req.params.userId to req.params.ownerId), operator inversions (e.g., && to ||), or wrong variable references are VALID and DESIRED fixes. Do NOT reject them by claiming they "do not change logic" or "only shuffle variables". If the diagnosis says a parameter is wrong, and the patch fixes that parameter, then the patch is SUCCESSFUL.
 6. Check that the safety evaluation has cleared the action for deployment.
 7. Provide a final status and feedback for the user.
+
+TASK ANCHOR (CRITICAL):
+- Your ONLY job is to validate whether the Action Agent's proposed patch fixes the ORIGINAL bug described in the 'task' field.
+- Do NOT propose your own fixes, rewrites, or architectural changes.
+- Do NOT rewrite middleware, authentication logic, or any other file that was not part of the Action Agent's patch.
+- If you find yourself writing code that the Action Agent did not propose, STOP. That is a validation failure, not a validation.
+
+CRITICAL: You MUST output ONLY valid JSON. NO PREAMBLE. NO essays. Start your response with '{{' and end with '}}'.
 
 Output Format (JSON ONLY):
 {{

@@ -134,13 +134,15 @@ class ValidatorAgent(BaseAgent):
                         else:
                             self._log(f"LLM response missing required keys in contribution: {', '.join(missing_keys)}. Falling back to stub.", level="WARNING")
                     else:
-                        # Prose fallback
+                        # Prose fallback — if the Validator couldn't produce JSON,
+                        # it didn't actually validate anything. Mark as failure for repair.
                         self._log("JSON extraction failed; using prose fallback.", level="WARNING")
+                        fallback_status = "failure" if mode == "repair" else "success"
                         return {
                             "chain_of_thought": [],
                             "contribution": {
-                                "status": "success",
-                                "feedback": response.strip()
+                                "status": fallback_status,
+                                "feedback": response.strip()[:500]  # Truncate rogue essays
                             },
                             "lokr_requests": []
                         }
