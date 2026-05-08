@@ -1,0 +1,22 @@
+services:
+  lokr-assistant:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      # Set your Groq (or other OpenAI-compatible) API key here
+      - API_KEY=${API_KEY:-}
+      # Optional: override the lokr_core path inside the container
+      - LOKR_PATH=/app/lokr_core
+    volumes:
+      # Persist logs outside the container
+      - ./logs:/app/logs
+      # Persist the demo app's indexed data (.lokr/, data/)
+      - ./lokr-demo-app:/app/lokr-demo-app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

@@ -48,8 +48,7 @@ class LLMClient:
             url = f"{normalized}/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "ngrok-skip-browser-warning": "true"  # Bypasses the free-tier ngrok HTML warning page
+                "Content-Type": "application/json"
             }
             payload = {
                 "model": self.model,
