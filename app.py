@@ -64,8 +64,14 @@ if st.sidebar.button("Re-index Project", disabled=not project_dir):
 
 use_lokr = st.sidebar.checkbox("Use Lokr context", value=True)
 
-st.sidebar.markdown("---")
-api_choice = st.sidebar.radio("LLM Provider", ["Local (Ollama)", "Remote API (OpenAI-Compatible)"])
+import os
+env_groq_key = os.environ.get("GROQ_API_KEY", "")
+
+if "api_choice" not in st.session_state:
+    st.session_state.api_choice = "Remote API" if env_groq_key else "Local (Ollama)"
+
+api_choice = st.sidebar.radio("LLM Provider", ["Local (Ollama)", "Remote API (OpenAI-Compatible)"], 
+                              index=1 if st.session_state.api_choice == "Remote API" else 0)
 
 if api_choice == "Local (Ollama)":
     api_type = "ollama"
@@ -77,7 +83,7 @@ else:
     api_type = "openai"
     base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
     model = st.sidebar.text_input("Model Name", value="llama3-70b-8192")
-    api_key = st.sidebar.text_input("API Key", type="password")
+    api_key = st.sidebar.text_input("API Key", value=env_groq_key, type="password")
 st.sidebar.info("Describe your problem or question in the main area. The assistant will automatically determine the best workflow.")
 
 # Custom Header
