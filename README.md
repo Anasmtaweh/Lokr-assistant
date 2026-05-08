@@ -1,3 +1,14 @@
+---
+title: Lokr Sentinel 2.0
+emoji: 🛡️
+colorFrom: blue
+colorTo: indigo
+sdk: streamlit
+sdk_version: 1.31.0
+app_file: app.py
+pinned: false
+---
+
 <div align="center">
 
 # 🛡️ Lokr Assistant — Sentinel 2.0
