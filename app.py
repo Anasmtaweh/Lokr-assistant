@@ -26,7 +26,7 @@ def get_ollama_models():
 available_models = get_ollama_models()
 
 st.sidebar.title("Lokr Assistant")
-project_dir = st.sidebar.text_input("Project Directory", value="/home/anas/Desktop/FILES NEEDED/pet-ai-render")
+project_dir = st.sidebar.text_input("Project Directory", value="./lokr-demo-app")
 
 if st.sidebar.button("Re-index Project", disabled=not project_dir):
     with st.spinner("Indexing project... (this may take a few minutes)"):
