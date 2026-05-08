@@ -42,22 +42,33 @@ class ActionAgent(BaseAgent):
         except json.JSONDecodeError:
             pass
 
-        # 2. Search for candidates
-        brace_indices = [i for i, char in enumerate(text) if char == '{']
-        end_brace_indices = [i for i, char in enumerate(text) if char == '}']
+        import re
+        # Find the first { and last }
+        first_brace = text.find("{")
+        last_brace = text.rfind("}")
         
-        for start in brace_indices:
-            for end in reversed(end_brace_indices):
-                if end > start:
-                    candidate = text[start : end + 1]
-                    try:
-                        parsed = json.loads(candidate)
-                        if isinstance(parsed, dict):
-                            return parsed
-                    except json.JSONDecodeError:
-                        continue
-
+        if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
+            json_str = text[first_brace:last_brace+1]
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                # Try to handle literal newlines in JSON strings by replacing them with a space
+                # for initial parsing, or better, just allow them if possible.
+                # Here we use a simpler replacement that avoids breaking structural newlines.
+                try:
+                    # Replace only newlines that are clearly inside what looks like a value
+                    # A very rough but often effective hack for LLM JSON:
+                    sanitized = json_str.replace('\n', '\\n')
+                    # But wait, that breaks the structure too. 
+                    # Let's try the strict=False approach first, then fallback to a space.
+                    return json.loads(json_str, strict=False)
+                except:
+                    sanitized = re.sub(r'(?<!\\)\n', ' ', json_str)
+                    return json.loads(sanitized)
+        
         self._log(f"JSON extraction failed for response: {text[:200]}...", level="WARNING")
+        # Store the raw text on the instance so we can retrieve it in run() if needed
+        self._last_failed_text = text
         return {}
 
     def run(self, state: Dict[str, Any], llm_client: Any, lokr_service: Any) -> Dict[str, Any]:
@@ -75,122 +86,132 @@ class ActionAgent(BaseAgent):
         self._log("Starting action generation...")
         
         mode = state.get("mode", self.mode)
-        
-        # Get diagnosis from the latest hypothesis
-        diagnosis = ""
-        if state.get("hypotheses"):
-            latest_hypothesis = state["hypotheses"][-1]
-            if "contribution" in latest_hypothesis:
-                diagnosis = latest_hypothesis["contribution"].get("diagnosis", "")
-            else:
-                diagnosis = latest_hypothesis.get("diagnosis", "")
 
         if llm_client:
-            try:
-                system_prompt = get_agent_prompt("action", mode)
-                user_msg = f"DIAGNOSIS TO ACT UPON:\n{diagnosis}\n"
+            system_prompt = get_agent_prompt("action", mode)
+            
+            # Check if this is a targeted revision request from Safety
+            safety_feedback = state.get("safety_feedback")
+            
+            if safety_feedback and safety_feedback.get("rejected"):
+                # FAST PATH: Targeted revision — Safety told us exactly what to fix
+                import json as _json
+                self._log("Building targeted revision prompt from Safety feedback...")
                 
-                # Include original code if available in state
+                # Get diagnosis from the preserved hypothesis
+                diagnosis = ""
+                if state.get("hypotheses"):
+                    latest_hypothesis = state["hypotheses"][-1]
+                    contrib = latest_hypothesis.get("contribution", latest_hypothesis)
+                    diagnosis = contrib.get("diagnosis", "")
+                    
+                user_msg = f"DIAGNOSIS (from previous analysis):\n{diagnosis}\n"
+                user_msg += f"\nSAFETY REJECTION — TARGETED REVISION REQUEST:\n"
+                user_msg += f"The Safety Agent rejected your previous patch for these reasons:\n"
+                user_msg += f"Warnings: {', '.join(safety_feedback.get('warnings', []))}\n"
+                user_msg += f"Reasoning: {safety_feedback.get('reasoning', '')}\n\n"
+                user_msg += f"SPECIFIC REVISIONS REQUIRED:\n"
+                for i, suggestion in enumerate(safety_feedback.get("suggestions", []), 1):
+                    user_msg += f"  {i}. {suggestion}\n"
+                user_msg += (
+                    f"\nYour task: Generate a REVISED patch that addresses ONLY the issues above. "
+                    f"Keep all other fixes from the original patch intact. "
+                    f"Do NOT re-analyze the entire codebase — just apply the requested revisions.\n"
+                )
+                
+                if "original_input" in state:
+                    user_msg += f"\nORIGINAL CODE:\n{state['original_input']}\n"
+            else:
+                # NORMAL PATH: Full patch generation from diagnosis
+                diagnosis = ""
+                issues_list = []
+                hypothesis = ""
+                if state.get("hypotheses"):
+                    latest_hypothesis = state["hypotheses"][-1]
+                    if "contribution" in latest_hypothesis:
+                        diagnosis = latest_hypothesis["contribution"].get("diagnosis", "")
+                        issues_list = latest_hypothesis["contribution"].get("issues", [])
+                        hypothesis = latest_hypothesis["contribution"].get("hypothesis", "")
+                    else:
+                        diagnosis = latest_hypothesis.get("diagnosis", "")
+                        issues_list = latest_hypothesis.get("issues", [])
+                        hypothesis = latest_hypothesis.get("hypothesis", "")
+                
+                user_msg = f"DIAGNOSIS TO ACT UPON:\n{diagnosis}\n"
+                if hypothesis:
+                    user_msg += f"\nROOT CAUSE HYPOTHESIS:\n{hypothesis}\n"
+                if issues_list:
+                    user_msg += f"\nALL ISSUES TO FIX (you MUST address EVERY item):\n"
+                    for i, issue in enumerate(issues_list, 1):
+                        user_msg += f"  {i}. {issue}\n"
+                    user_msg += f"\nTotal issues: {len(issues_list)}. Your patch MUST contain fixes for ALL {len(issues_list)} issues listed above.\n"
+                
                 if "original_input" in state:
                     user_msg += f"\nORIGINAL CODE:\n{state['original_input']}\n"
                     
-                # Include safety warnings if re-running
+                # Include safety warnings if re-running (old-style needs_revision)
                 if state.get("needs_revision") and state.get("safety_reports"):
                     latest_safety = state["safety_reports"][-1]
-                    if "contribution" in latest_safety:
-                        warnings = latest_safety["contribution"].get("warnings", [])
-                    else:
-                        warnings = latest_safety.get("warnings", [])
-                    user_msg += f"\nSAFETY WARNINGS TO ADDRESS:\n{warnings}\n"
+                    s_contrib = latest_safety.get("contribution", {}) if "contribution" in latest_safety else latest_safety
+                    warnings = s_contrib.get("warnings", [])
+                    reasoning = s_contrib.get("reasoning", "")
+                    
+                    user_msg += f"\nSAFETY REJECTION FEEDBACK:\n"
+                    user_msg += f"Warnings: {warnings}\n"
+                    if reasoning:
+                        user_msg += f"Safety reasoning for rejection: {reasoning}\n"
+                    user_msg += f"Instruction: Your previous patch was rejected for safety reasons. Fix these specific issues.\n"
 
-                self._log(f"Generating LLM action for mode: {mode}...")
-                response = llm_client.generate(prompt=user_msg, system=system_prompt, temperature=0.2)
-                
-                if response:
-                    parsed = self._extract_json(response)
-                    if parsed:
-                        if "contribution" not in parsed:
-                            parsed["contribution"] = {
-                                "action_type": parsed.pop("action_type", mode),
-                                "patch": parsed.pop("patch", ""),
-                                "review_comments": parsed.pop("review_comments", []),
-                                "deployment_checks": parsed.pop("deployment_checks", [])
-                            }
-                            if "chain_of_thought" not in parsed:
-                                parsed["chain_of_thought"] = []
-                            if "lokr_requests" not in parsed:
-                                parsed["lokr_requests"] = []
-                                
-                        contrib = parsed.get("contribution", {})
-                        
-                        # Define required keys based on mode
-                        required_keys = []
-                        if mode == "repair":
-                            required_keys = ["action_type", "patch"]
-                        elif mode == "review":
-                            required_keys = ["observations", "recommendations", "suggestion_priority"]
-                        elif mode == "prevent":
-                            required_keys = ["blockers", "warnings", "recommendations"]
+            self._log(f"Generating LLM action for mode: {mode}...")
+            response = llm_client.generate(prompt=user_msg, system=system_prompt, temperature=0.2)
+            
+            if not response or not response.strip():
+                raise ValueError(f"[Action] LLM returned empty response for mode '{mode}'.")
+            
+            parsed = self._extract_json(response)
+            
+            if not parsed:
+                raise ValueError(
+                    f"[Action] JSON extraction failed. LLM returned non-JSON: "
+                    f"{response[:200]}..."
+                )
 
-                        missing_keys = [k for k in required_keys if k not in contrib]
-                        if not missing_keys:
-                            self._log("Action generation completed successfully via LLM.")
-                            return parsed
-                        else:
-                            self._log("LLM response missing required keys in contribution, falling back to stub.", level="WARNING")
-                    else:
-                        # Prose fallback
-                        self._log("JSON extraction failed. Returning error dict.", level="ERROR")
-                        return {
-                            "chain_of_thought": [],
-                            "contribution": {
-                                "status": "failed_generation",
-                                "action_type": mode,
-                                "patch": "Unable to generate patch; model did not return valid JSON.",
-                                "review_comments": [],
-                                "deployment_checks": []
-                            },
-                            "lokr_requests": []
-                        }
-                else:
-                    self._log("Empty response from LLM, falling back to stub.", level="WARNING")
-            except Exception as e:
-                self._log(f"LLM call failed: {e}. Falling back to stub.", level="ERROR")
-
-        # Stub fallback
-        self._log("Using fallback action generation (stub).")
-        if mode == "review":
-            result = {
-                "chain_of_thought": [],
-                "contribution": {
-                    "status": "failed_generation",
-                    "observations": ["Stub observation for mode: review"],
-                    "recommendations": ["Stub recommendation"],
-                    "suggestion_priority": "Low"
-                },
-                "lokr_requests": []
-            }
-        elif mode == "prevent":
-            result = {
-                "chain_of_thought": [],
-                "contribution": {
-                    "status": "failed_generation",
-                    "blockers": ["Stub blocker"],
-                    "warnings": ["Stub warning"],
-                    "recommendations": ["Stub recommendation"]
-                },
-                "lokr_requests": []
-            }
-        else:
-            result = {
-                "chain_of_thought": [],
-                "contribution": {"status": "failed_generation", "action_type": mode},
-                "lokr_requests": []
-            }
+            # Normalize: wrap flat responses into contribution structure
+            if "contribution" not in parsed:
+                parsed["contribution"] = {
+                    "action_type": parsed.pop("action_type", mode),
+                    "patch": parsed.pop("patch", ""),
+                    "review_comments": parsed.pop("review_comments", []),
+                    "deployment_checks": parsed.pop("deployment_checks", [])
+                }
+            if "chain_of_thought" not in parsed:
+                parsed["chain_of_thought"] = []
+            if "lokr_requests" not in parsed:
+                parsed["lokr_requests"] = []
+                    
+            contrib = parsed.get("contribution", {})
+            
+            # Mode-specific required fields
             if mode == "repair":
-                result["contribution"]["patch"] = "/* stub patch */"
-                
-        return result
+                required_keys = ["action_type", "patch"]
+            elif mode == "review":
+                required_keys = ["observations", "recommendations", "suggestion_priority"]
+            elif mode == "prevent":
+                required_keys = ["blockers", "warnings", "recommendations"]
+            else:
+                required_keys = []
+
+            missing_keys = [k for k in required_keys if k not in contrib]
+            if missing_keys:
+                raise ValueError(
+                    f"[Action] Mode '{mode}' requires fields {missing_keys} in contribution. "
+                    f"Got keys: {list(contrib.keys())}. Response: {response[:200]}..."
+                )
+            
+            self._log("Action generation completed successfully via LLM.")
+            return parsed
+        else:
+            raise ValueError("[Action] No LLM client provided.")
 
 
 if __name__ == "__main__":

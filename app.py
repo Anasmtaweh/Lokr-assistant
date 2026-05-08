@@ -7,6 +7,10 @@ from modes.orchestrator import run_assistant
 
 st.set_page_config(page_title="Lokr Assistant", layout="wide")
 
+# Load Custom Sentinel Theme
+with open("style.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
 # Fetch available Ollama models
 @st.cache_data(ttl=60)
 def get_ollama_models():
@@ -76,7 +80,9 @@ else:
     api_key = st.sidebar.text_input("API Key", type="password")
 st.sidebar.info("Describe your problem or question in the main area. The assistant will automatically determine the best workflow.")
 
-st.title("🤖 AI Engineering Assistant")
+# Custom Header
+st.markdown('<h1 class="main-title">🛡️ LOKR SENTINEL</h1>', unsafe_allow_html=True)
+st.markdown('<p style="margin-top: -30px; opacity: 0.7; font-weight: 300;">Multi-Agent Codebase Defense & Orchestration</p>', unsafe_allow_html=True)
 # Initialize session state for history
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -106,11 +112,21 @@ if user_input:
         st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.status("Running agents…", expanded=True) as status:
+        # Sentinel Live Feed
+        st.markdown("### 📡 SENTINEL LIVE FEED")
+        live_feed = st.empty()
+        feed_content = []
+
+        with st.status("Initializing Agents…", expanded=True) as status:
             def progress(msg):
+                feed_content.append(msg)
+                # Show only the last 5 lines for a scrolling "terminal" effect
+                display_text = "\n\n".join(feed_content[-5:])
+                live_feed.markdown(f'<div class="glass-container" style="padding:15px; border-left: 3px solid var(--primary-neon); background: rgba(0,0,0,0.2); font-family: monospace; font-size: 0.9rem;">{display_text}</div>', unsafe_allow_html=True)
                 status.write(f"⏳ {msg}")
             
             # Pass history to orchestrator
+            import time
             result = run_assistant(
                 user_input=user_input,
                 project_path=project_dir if use_lokr else None,
@@ -120,225 +136,211 @@ if user_input:
                 api_type=api_type,
                 base_url=base_url,
                 api_key=api_key,
-                history=st.session_state.messages[:-1] # Exclude the current message
+                history=st.session_state.messages[:-1]
             )
-            status.update(label="Analysis complete ✅", state="complete")
+            time.sleep(1) # Final pause for dramatic effect
+            status.update(label="SENTINEL ANALYSIS COMPLETE ✅", state="complete")
         
-        # Determine the answer content
-        if result.get("type") == "explain":
-            answer = result.get("answer", "")
-        else:
-            # For pipeline results, summarize based on mode
-            mode = result.get("mode", "analysis")
-            analysis = result.get("analysis", {})
-            
-            if mode == "repair":
-                status = result.get("status", "unknown")
-                verdict = "✅ FIXED" if status == "success" else ("⚠️ NEEDS REVIEW" if status == "failed" else f"⚠️ {status.upper()}")
-                summary = analysis.get("diagnosis", result.get("validation", {}).get("feedback", "No summary available."))
-                answer = f"### Repair Result: {verdict}\n\n{summary}"
-            elif mode == "review":
-                approval = result.get("approval", "UNKNOWN")
-                summary = analysis.get("changes_summary", "No summary available.")
-                answer = f"### Review Result: {approval}\n\n{summary}"
-            elif mode == "prevent":
-                approval = result.get("approval", "UNKNOWN")
-                summary = analysis.get("change_summary", "No summary available.")
-                answer = f"### Deployment Assessment: {approval}\n\n{summary}"
-            else:
-                answer = f"### {mode.capitalize()} Result\n\nAnalysis complete."
-            
-        st.markdown(answer)
-        
-        # Store assistant response
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "content": answer,
-            "result": result
-        })
+        # --- SENTINEL PREMIUM REPORT ---
+        mode = result.get("mode", "analysis")
+        analysis = result.get("analysis", {})
+        action = result.get("action", {})
+        safety = result.get("safety", {})
+        validation = result.get("validation", {})
         
         if result.get("type") == "explain":
+            st.markdown(result.get("answer", ""))
             with st.expander("View Code Context"):
                 st.text(result.get("context", ""))
-        elif result.get("type") == "pipeline":
-            st.subheader("Pipeline Result")
+        else:
+            # 1. MAIN VERDICT
+            verdict_icon = "✅" if result.get("status") == "success" else "❌"
+            mode_label = mode.upper()
+            st.markdown(f"### {mode_label} RESULT: {verdict_icon} {result.get('status', 'COMPLETE').upper()}")
             
-            # Common Status
-            wf_status = result.get("status")
-            if wf_status == "success":
-                st.success("Workflow completed successfully.")
-            elif wf_status == "refused":
-                st.error("The analysis was refused by the model.")
-            elif wf_status in ["failure", "failed"]:
-                st.error("Workflow finished with status: failure.")
-            else:
-                st.warning(f"Workflow finished with status: {wf_status}")
+            if mode == "repair" and result.get("status") == "success":
+                st.success(f"**Root Cause:** {analysis.get('hypothesis', 'Issue identified and patched.')}")
             
-            mode = result.get("mode")
-            analysis = result.get("analysis", {})
-            action = result.get("action", {})
-            safety = result.get("safety", {})
-            validation = result.get("validation", {})
+            st.divider()
+
+            # 2. CONTEXT USED
             classification = result.get("classification", {})
-            
-            confidence = classification.get("confidence", 0.0)
-            if confidence > 0 and confidence < 0.5:
-                st.warning("⚠️ Low confidence — manual review recommended")
-                
-            files = []
-            files.extend(classification.get("files_to_analyze", []))
-            if isinstance(analysis, dict):
-                files.extend(analysis.get("files_changed", []))
-                files.extend(analysis.get("evidence_used", []))
-            
-            files = list(set([f for f in files if isinstance(f, str)]))[:5]
+            files = classification.get("files_to_analyze", [])
             if files:
-                st.markdown("### 🔍 Context Used")
+                st.markdown("#### 🔍 Context Used")
                 for f in files:
                     st.write(f"• `{f}`")
-            st.markdown("---")
-            
+                st.divider()
+
+            # 3. MODE-AWARE RESULTS SECTION
             if mode == "repair":
-                evidence_used = analysis.get("evidence_used", [])
-                classification_files = result.get("classification", {}).get("files_to_analyze", [])
-                primary_file = evidence_used[0] if evidence_used else (classification_files[0] if classification_files else "unknown file")
-                diag_issue = (analysis.get("diagnosis", "") or (analysis.get("issues", [{}])[0].get("description", "") if analysis.get("issues") else ""))[:200]
-                confidence = classification.get("confidence", 0.0)
-                conf_color = "green" if confidence >= 0.8 else ("orange" if confidence >= 0.5 else "red")
-                
-                if primary_file == "unknown file" and not diag_issue:
-                    st.markdown(f"Analysis completed. (Confidence: :{conf_color}[**{confidence:.1f}**])")
-                else:
-                    st.markdown(f"Analyzed: {primary_file}  \nIssue: {diag_issue}  \nConfidence: :{conf_color}[**{confidence:.1f}**]")
+                col_diag, col_patch = st.columns([1, 1])
+                with col_diag:
+                    st.markdown("#### 🔍 Diagnosis & Evidence")
+                    execution_trace = analysis.get("execution_trace")
+                    if execution_trace:
+                        st.markdown("**Execution Trace:**")
+                        st.code(execution_trace, language="text")
                     
-                st.markdown("### Diagnosis")
-                st.write(analysis.get("diagnosis", "No diagnosis provided."))
+                    findings = analysis.get("findings", [])
+                    if findings:
+                        for f in findings:
+                            st.error(f"**Issue:** {f.get('issue', 'Unknown')}\n\n**File:** `{f.get('file', 'Unknown')}:{f.get('line', '?')}`\n\n**Impact:** {f.get('impact', 'Unknown')}")
+                            st.markdown("**Evidence:**")
+                            st.code(f.get('evidence', ''), language="javascript")
+                    else:
+                        st.info(analysis.get("hypothesis", "No grounded findings provided."))
                 
-                st.markdown("### Proposed Fix")
-                patch = analysis.get("final_patch") or result.get("final_patch") or action.get("patch", "")
-                st.code(patch, language="javascript")
-                
-                st.markdown("### Safety & Risk")
-                col1, col2 = st.columns(2)
-                risk_score = safety.get("risk_score", 0)
-                risk_level = "Low" if float(risk_score) < 0.3 else ("Medium" if float(risk_score) <= 0.7 else "High")
-                col1.metric("Risk Level", risk_level, f"{risk_score}", delta_color="inverse")
-                
-                is_safe = safety.get("safe", False)
-                verdict = "✅ Safe to apply" if is_safe else "⚠️ Needs review"
-                col2.markdown(f"**Verdict:** {verdict}")
-                
-                st.markdown("### Validation Feedback")
-                st.info(validation.get("feedback", "No feedback."))
-                
+                with col_patch:
+                    st.markdown("#### 🛠️ Proposed Fix")
+                    patch = result.get("final_patch") or action.get("patch", "")
+                    if patch:
+                        if "--- " in patch or "diff --git" in patch:
+                            st.code(patch, language="diff")
+                        else:
+                            buggy = analysis.get("findings", [""])[0] if analysis.get("findings") else ""
+                            if buggy:
+                                if isinstance(buggy, dict):
+                                    buggy_text = buggy.get("issue", "")
+                                else:
+                                    buggy_text = str(buggy)
+                                st.code(f"- {buggy_text}\n+ {patch}", language="diff")
+                            else:
+                                st.code(patch, language="javascript")
+                    else:
+                        st.info("No patch generated.")
+
             elif mode == "review":
-                confidence = classification.get("confidence", 0.0)
-                conf_color = "green" if confidence >= 0.8 else ("orange" if confidence >= 0.5 else "red")
-                st.markdown(f"Reviewed: {', '.join(analysis.get('files_affected', ['unknown']))}  \nChange type: {analysis.get('change_type', 'unknown')}  \nConfidence: :{conf_color}[**{confidence:.1f}**]")
-                
-                st.markdown("### Change Summary")
-                st.write(analysis.get("changes_summary", ""))
-                
-                st.markdown(f"**Change Type:** {analysis.get('change_type', 'Unknown')}")
-                
+                st.subheader("📝 Review Assessment")
+                st.markdown(f"**Change Summary:** {analysis.get('changes_summary', '')}")
+                st.markdown(f"**Change Type:** {analysis.get('change_type', '')}")
+
+                if action.get("observations"):
+                    st.markdown("**Observations:**")
+                    for obs in action["observations"]:
+                        st.markdown(f"- {obs}")
+                if action.get("recommendations"):
+                    st.markdown("**Recommendations:**")
+                    for rec in action["recommendations"]:
+                        st.markdown(f"- {rec}")
+                if action.get("suggestion_priority"):
+                    st.markdown(f"**Priority:** {action['suggestion_priority']}")
+
                 decision = result.get("approval", "UNKNOWN")
-                color = "green" if decision == "APPROVE" else ("orange" if decision == "REQUEST_CHANGES" else "red")
-                st.markdown(f"**Decision:** :{color}[**{decision}**]")
-                
-                st.markdown("### Files Affected")
-                for f in analysis.get("files_affected", []):
-                    st.markdown(f"- {f}")
-                    
-                st.markdown("### Observations")
-                for i, obs in enumerate(action.get("observations", []), 1):
-                    st.markdown(f"{i}. {obs}")
-                    
-                st.markdown("### Recommendations")
-                for rec in action.get("recommendations", []):
-                    st.markdown(f"- {rec}")
-                    
-                st.markdown(f"**Deployment Risk:** {safety.get('deployment_risk', 'Unknown')}")
-                
-                st.markdown("### Review Checklist")
-                for item in validation.get("review_checklist", []):
-                    st.markdown(f"- [ ] {item}")
-                    
+                color = "red" if decision == "REQUEST_CHANGES" else "green"
+                st.markdown(f"### Decision: :{color}[{decision}]")
+
             elif mode == "prevent":
-                st.markdown(f"Assessed: {', '.join(analysis.get('files_changed', ['unknown']))}  \nReadiness score: {analysis.get('readiness_score', '?')}")
-                
-                st.markdown("### Readiness Assessment")
-                score = analysis.get("readiness_score", 0)
-                try:
-                    score_float = float(score)
-                except (ValueError, TypeError):
-                    score_float = 0.0
-                st.progress(score_float, text=f"Readiness Score: {score_float:.2f}")
-                
-                decision = result.get("approval", "UNKNOWN")
-                color = "green" if decision == "SAFE_TO_DEPLOY" else ("orange" if decision == "PROCEED_WITH_CAUTION" else "red")
-                st.markdown(f"**Go/No-Go:** :{color}[**{decision}**]")
-                
-                st.markdown("### Files Changed")
-                for f in analysis.get("files_changed", []):
-                    st.markdown(f"- {f}")
+                st.subheader("🛡️ Deployment Readiness")
+                st.metric("Readiness Score", f"{analysis.get('readiness_score', 0.0):.2f}")
                 
                 blockers = action.get("blockers", [])
                 if blockers:
-                    st.markdown("### Blockers")
+                    st.error("Blockers:")
                     for b in blockers:
-                        st.error(b)
-                
+                        st.markdown(f"- {b}")
                 warnings = action.get("warnings", [])
                 if warnings:
-                    st.markdown("### Warnings")
+                    st.warning("Warnings:")
                     for w in warnings:
-                        st.warning(w)
-                        
-                st.markdown("### Recommendations")
-                for rec in action.get("recommendations", []):
-                    st.markdown(f"- {rec}")
-                    
-                st.markdown(f"**Deployment Risk:** {safety.get('deployment_risk', 'Unknown')}")
+                        st.markdown(f"- {w}")
+                recommendations = action.get("recommendations", [])
+                if recommendations:
+                    st.info("Recommendations:")
+                    for r in recommendations:
+                        st.markdown(f"- {r}")
+
+                go_no_go = safety.get("go_no_go", "UNKNOWN")
+                color = "green" if go_no_go == "SAFE_TO_DEPLOY" else ("orange" if "CAUTION" in go_no_go else "red")
+                st.markdown(f"### Verdict: :{color}[{go_no_go}]")
+
+            # 4. SAFETY & RISK
+            st.divider()
+            st.markdown("### 🛡️ Safety & Risk")
+            s_col1, s_col2, s_col3 = st.columns(3)
+            risk_score = safety.get("risk_score", 0.0)
+            risk_level = "LOW" if risk_score < 0.3 else ("MEDIUM" if risk_score < 0.7 else "HIGH")
+            s_col1.metric("Risk Level", risk_level)
+            s_col2.metric("Risk Score", risk_score)
+            s_col3.write(f"**Verdict:** {'✅ SAFE' if safety.get('safe') else '⚠️ WARNING'}")
+            for w in safety.get("warnings", []):
+                st.warning(w)
+
+            # 5. INVESTIGATION TIMELINE (THE TRACE)
+            st.divider()
+            st.markdown("### ⏱️ Investigation Timeline (Trace)")
+            st.caption("Step-by-step reasoning from the Sentinel multi-agent core.")
+
+            raw_hypotheses = result.get("_raw_hypotheses", [])
+            raw_actions = result.get("_raw_actions", [])
+            raw_safety = result.get("_raw_safety", [])
+            raw_validations = result.get("_raw_validations", [])
+
+            # --- Agent 1: Analyzer ---
+            if analysis:
+                st.markdown('<div class="timeline-agent">', unsafe_allow_html=True)
+                st.markdown("#### 1. 🔍 Analyzer")
+                st.markdown(f"**Hypothesis:** {analysis.get('hypothesis', 'Hypothesis generated.')}")
                 
-                st.markdown("### Health Checks")
-                for hc in safety.get("health_checks", []):
-                    st.markdown(f"- {hc}")
-                    
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("### Pre-deploy Checklist")
-                    for item in validation.get("pre_deploy_checklist", []):
-                        st.markdown(f"- [ ] {item}")
-                with col2:
-                    st.markdown("### Post-deploy Checklist")
-                    for item in validation.get("post_deploy_checklist", []):
-                        st.markdown(f"- [ ] {item}")
-                        
-            st.markdown("---")
-            with st.expander("⏱️ Investigation Timeline (Trace)"):
-                st.markdown("This timeline shows the exact reasoning steps the agents took.")
-                if analysis:
-                    diag = analysis.get("diagnosis", analysis.get("changes_summary", analysis.get("change_summary", "Analyzed the code context.")))
-                    st.info(f"**1. 🔍 Analyzer** → {diag}")
-                if action:
-                    if mode == "prevent":
-                        act_summary = f"Identified {len(action.get('blockers', []))} blocker(s) and {len(action.get('warnings', []))} warning(s)."
-                    elif mode == "repair":
-                        act_summary = "Proposed a code patch to resolve the diagnosed issue."
-                    else:
-                        obs = action.get("observations", ["Generated review observations."])
-                        act_summary = obs[0] if obs else "Generated review observations."
-                    st.info(f"**2. 🛠️ Action Agent** → {act_summary}")
-                if safety:
-                    saf_summary = safety.get("reasoning", "Evaluated deployment risk.")
-                    st.info(f"**3. 🛡️ Safety Agent** → {saf_summary}")
-                if validation:
-                    val_summary = validation.get("feedback", "Verified the proposed changes.")
-                    st.info(f"**4. ✅ Validator** → {val_summary}")
-                        
+                findings = analysis.get('findings', [])
+                if findings:
+                    st.markdown("**Key Findings:**")
+                    for f in findings:
+                        if isinstance(f, dict):
+                            st.markdown(f"- **{f.get('issue', 'Issue')}**: {f.get('impact', '')}")
+                        else:
+                            st.markdown(f"- {f}")
+                
+                cot = raw_hypotheses[-1].get("chain_of_thought", []) if raw_hypotheses else []
+                if cot:
+                    with st.expander("View Analyzer Reasoning"):
+                        for s in cot: st.markdown(f"- {s}")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            # --- Agent 2: Action ---
+            if action:
+                st.markdown('<div class="timeline-agent" style="border-color: #bc00ff;">', unsafe_allow_html=True)
+                st.markdown("#### 2. 🛠️ Action Agent")
+                st_label = "Patch generated" if mode == "repair" else "Observations drafted"
+                st.markdown(f"**Result:** {st_label}")
+                
+                if mode == "repair" and action.get("patch"):
+                    with st.expander("View Patch Summary"):
+                        st.code(action.get("patch")[:500] + ("..." if len(action.get("patch", "")) > 500 else ""), language="javascript")
+                
+                cot = raw_actions[-1].get("chain_of_thought", []) if raw_actions else []
+                if cot:
+                    with st.expander("View Action Reasoning"):
+                        for s in cot: st.markdown(f"- {s}")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            # --- Agent 3: Safety ---
+            if safety:
+                st.markdown('<div class="timeline-agent" style="border-color: #00ff88;">', unsafe_allow_html=True)
+                st.markdown("#### 3. 🛡️ Safety Agent")
+                st.markdown(f"**Verdict:** {'✅ PASS' if safety.get('safe') else '⚠️ WARNING/REJECTED'}")
+                st.markdown(f"**Reasoning:** {safety.get('reasoning', 'Evaluated deployment risk.')}")
+                
+                cot = raw_safety[-1].get("chain_of_thought", []) if raw_safety else []
+                if cot:
+                    with st.expander("View Safety Reasoning"):
+                        for s in cot: st.markdown(f"- {s}")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            # --- Agent 4: Validator ---
+            if validation:
+                st.markdown('<div class="timeline-agent" style="border-color: #ffaa00;">', unsafe_allow_html=True)
+                st.markdown("#### 4. ✅ Validator")
+                st.markdown(f"**Feedback:** {validation.get('feedback', 'Validation complete.')}")
+                
+                cot = raw_validations[-1].get("chain_of_thought", []) if raw_validations else []
+                if cot:
+                    with st.expander("View Validator Reasoning"):
+                        for s in cot: st.markdown(f"- {s}")
+                st.markdown('</div>', unsafe_allow_html=True)
+
             with st.expander("Show full JSON"):
                 st.json(result)
-        else:
-            st.subheader("Result")
-            with st.expander("Show full JSON"):
-                st.json(result)
+
+        # Store for session history
+        st.session_state.messages.append({"role": "assistant", "content": "Analysis complete.", "result": result})

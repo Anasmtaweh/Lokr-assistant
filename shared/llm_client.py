@@ -39,10 +39,17 @@ class LLMClient:
             str: The content of the model's response.
         """
         if self.api_type == "openai":
-            url = f"{self.base_url}/v1/chat/completions"
+            # Normalize: strip known suffixes so we always build from the root
+            normalized = self.base_url
+            for suffix in ["/v1/chat/completions", "/chat/completions", "/v1"]:
+                if normalized.endswith(suffix):
+                    normalized = normalized[: -len(suffix)]
+                    break
+            url = f"{normalized}/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "ngrok-skip-browser-warning": "true"  # Bypasses the free-tier ngrok HTML warning page
             }
             payload = {
                 "model": self.model,
@@ -61,13 +68,54 @@ class LLMClient:
                 }
             }
 
+
         import time
+        import os
+        import datetime
+        import json
+        
+        # --- FORENSIC INSTRUMENTATION: LOG PAYLOAD & TOKENS ---
+        os.makedirs("logs", exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        log_file = f"logs/llm_payload_{timestamp}.json"
+        
+        # Estimate tokens
+        system_len = 0
+        user_len = 0
+        for m in messages:
+            if m.get("role") == "system":
+                system_len += len(m.get("content", ""))
+            elif m.get("role") == "user":
+                user_len += len(m.get("content", ""))
+                
+        # Estimate: ~4 chars per token
+        token_estimate = (system_len + user_len) // 4
+        truncation_warning = token_estimate > 20000
+        
+        debug_info = {
+            "timestamp": timestamp,
+            "model": self.model,
+            "api_type": self.api_type,
+            "token_estimate": token_estimate,
+            "truncation_warning": truncation_warning,
+            "system_chars": system_len,
+            "user_chars": user_len,
+            "payload": payload
+        }
+        
+        with open(log_file, "w") as f:
+            json.dump(debug_info, f, indent=2)
+            
+        print(f"[FORENSIC] LLM Request logged to {log_file} (Estimated Tokens: {token_estimate})")
+        # ------------------------------------------------------
+        
         for attempt in range(3):
+
             try:
                 if headers:
-                    response = requests.post(url, headers=headers, json=payload, timeout=30)
+                    response = requests.post(url, headers=headers, json=payload, timeout=120)
                 else:
-                    response = requests.post(url, json=payload, timeout=30)
+                    response = requests.post(url, json=payload, timeout=120)
                     
                 response.raise_for_status()
                 data = response.json()

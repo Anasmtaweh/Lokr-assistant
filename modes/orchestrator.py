@@ -38,7 +38,13 @@ def _classify_intent(user_input: str, llm_client: LLMClient, lokr_service: Optio
     """Classify the user intent into repair, review, prevent, or explain."""
     
     # Keyword scanning for fast-path classification
-    repair_keywords = ["fix this", "missing await", "should be", "not working", "broken"]
+    repair_keywords = [
+        "fix this", "fix it", "find and fix", "find the bug", "find the issue",
+        "missing await", "should be", "not working", "broken", "why is",
+        "debug", "patch", "security bypass", "security vulnerability",
+        "race condition", "crashes with", "throws error", "throws an error",
+        "bug in", "buggy", "diagnose", "deep audit",
+    ]
     fast_path_intent = None
     lower_input = user_input.lower()
     if any(kw in lower_input for kw in repair_keywords):
@@ -157,6 +163,243 @@ def _get_candidate_functions(lokr_service: LokrService, files_to_analyze: list) 
     return candidates
 
 
+def _build_relationship_graph(file_list: list, lokr_service) -> dict:
+    graph = {
+        "nodes": [],
+        "edges": []
+    }
+    if not lokr_service:
+        return graph
+
+    added_nodes = set()
+    added_edges = set()
+
+    def add_node(node_id, n_type, name, file_path, line=0, signature=""):
+        if node_id not in added_nodes:
+            graph["nodes"].append({
+                "id": node_id,
+                "type": n_type,
+                "name": name,
+                "file": file_path,
+                "line": line,
+                "signature": signature
+            })
+            added_nodes.add(node_id)
+
+    def add_edge(source, target, e_type):
+        edge_id = f"{source}->{target}:{e_type}"
+        if edge_id not in added_edges:
+            graph["edges"].append({
+                "source": source,
+                "target": target,
+                "type": e_type
+            })
+            added_edges.add(edge_id)
+
+    # 1. Process files
+    functions_to_trace = []
+    for filepath in file_list:
+        summary = lokr_service.get_file_summary(filepath)
+        if "error" in summary:
+            continue
+
+        file_node_id = f"file::{filepath}"
+        import os
+        add_node(file_node_id, "file", os.path.basename(filepath), filepath)
+
+        # Add functions and 'contains' edges
+        for func in summary.get("functions", []):
+            func_name = func.get("name", "")
+            if not func_name:
+                continue
+            func_node_id = f"function::{func_name}"
+            add_node(func_node_id, "function", func_name, filepath, func.get("lineno", 0), func.get("signature", ""))
+            add_edge(file_node_id, func_node_id, "contains")
+            functions_to_trace.append(func_name)
+
+        # Add imports and 'imports' edges
+        for imp in summary.get("imports", []):
+            if isinstance(imp, dict):
+                imp_name = imp.get("module", imp.get("name", "unknown"))
+            else:
+                imp_name = str(imp)
+            imp_node_id = f"file::{imp_name}"
+            add_node(imp_node_id, "file", imp_name, imp_name)
+            add_edge(file_node_id, imp_node_id, "imports")
+
+    # 2. Trace 1-hop dependencies for functions
+    for func_name in functions_to_trace:
+        try:
+            deps = lokr_service.get_function_dependencies(func_name)
+            if "error" in deps or not deps:
+                # Log and continue if dependencies can't be resolved (common for middleware/anon functions)
+                print(f"[ORCHESTRATOR][WARNING] Could not resolve dependencies for '{func_name}'. Skipping graph expansion.")
+                continue
+            
+            func_node_id = f"function::{func_name}"
+
+            # Callers -> calls -> this function
+            for caller in deps.get("callers", []):
+                caller_name = caller.get("name", "")
+                if not caller_name: continue
+                caller_file = caller.get("file_path", caller.get("file", ""))
+                caller_node_id = f"function::{caller_name}"
+                add_node(caller_node_id, "function", caller_name, caller_file, caller.get("lineno", 0))
+                add_edge(caller_node_id, func_node_id, "calls")
+
+            # This function -> calls -> Callees
+            for callee in deps.get("callees", []):
+                callee_name = callee.get("name", "")
+                if not callee_name: continue
+                callee_file = callee.get("file_path", callee.get("file", ""))
+                # Determine if middleware
+                n_type = "middleware" if any(kw in callee_name.lower() for kw in ["middleware", "auth", "guard", "protect", "verify"]) else "function"
+                callee_node_id = f"function::{callee_name}"
+                add_node(callee_node_id, n_type, callee_name, callee_file, callee.get("lineno", 0))
+                add_edge(func_node_id, callee_node_id, "calls")
+        except Exception as e:
+            print(f"[ORCHESTRATOR][WARNING] Error tracing dependencies for '{func_name}': {e}")
+            continue
+
+    return graph
+
+
+def _prescan_for_backdoors(files_to_analyze: list, lokr_service) -> list:
+    """
+    Deterministic pre-scan for obvious security backdoors BEFORE the LLM Analyzer runs.
+    Catches patterns that LLMs sometimes normalize away or miss due to context limits.
+    Returns a list of finding dicts (empty if none found).
+    """
+    import re
+    import os
+
+    # Patterns to detect (compiled for performance)
+    HEADER_BYPASS_KEYWORDS = re.compile(
+        r'req\.headers\s*\[.*?(debug|bypass|backdoor|secret|testing)',
+        re.IGNORECASE
+    )
+    HEADER_EQUALS_TRUE = re.compile(
+        r'req\.headers\s*\[.*?\]\s*(?:===?|==)\s*[\'"]true[\'"]',
+        re.IGNORECASE
+    )
+    HARDCODED_ROLE = re.compile(
+        r'req\.user\s*=\s*\{[^}]*role\s*:\s*[\'"](?:admin|superadmin|root)[\'"]',
+        re.IGNORECASE
+    )
+    RETURN_NEXT_AFTER_HEADER = re.compile(
+        r'if\s*\(\s*req\.headers\s*\[.*?\].*?\)\s*\{[^}]*(?:return\s+next\(\)|next\(\))',
+        re.IGNORECASE | re.DOTALL
+    )
+    # Generic sentinel: any header check that short-circuits auth
+    DEBUG_HEADER_NAME = re.compile(
+        r'[\'"]x-(?:sentinel-)?(?:debug|bypass|backdoor|testing|secret)[\'"]',
+        re.IGNORECASE
+    )
+
+    findings = []
+    finding_counter = 0
+
+    scan_files = list(files_to_analyze) if files_to_analyze else []
+
+    for filepath in scan_files:
+        # Resolve absolute path
+        resolved = filepath
+        if not os.path.isabs(resolved) and lokr_service:
+            resolved = os.path.join(getattr(lokr_service, 'project_path', ''), filepath.lstrip('/'))
+        if not os.path.exists(resolved):
+            continue
+
+        try:
+            with open(resolved, 'r', errors='ignore') as fh:
+                lines = fh.readlines()
+        except Exception:
+            continue
+
+        # Multi-line buffer for pattern matching across adjacent lines
+        full_text = ''.join(lines)
+
+        # Check multi-line patterns against the full file
+        for match in RETURN_NEXT_AFTER_HEADER.finditer(full_text):
+            line_num = full_text[:match.start()].count('\n') + 1
+            matched_text = match.group(0).strip()
+            finding_counter += 1
+            findings.append({
+                "finding_id": f"PRESCAN-{finding_counter:03d}",
+                "vulnerability_class": "Authentication Bypass / Backdoor",
+                "severity_tier": "CAT-0_CRITICAL",
+                "location": {
+                    "file": filepath,
+                    "line": line_num,
+                    "code": matched_text[:200]
+                },
+                "impact": "Any request with this header bypasses authentication and gets elevated privileges.",
+                "evidence": matched_text[:300]
+            })
+
+        # Check line-by-line patterns
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith('//') or stripped.startswith('#'):
+                continue
+
+            # Debug header name detection
+            if DEBUG_HEADER_NAME.search(stripped):
+                finding_counter += 1
+                findings.append({
+                    "finding_id": f"PRESCAN-{finding_counter:03d}",
+                    "vulnerability_class": "Hardcoded Debug Header",
+                    "severity_tier": "CAT-0_CRITICAL",
+                    "location": {
+                        "file": filepath,
+                        "line": line_num,
+                        "code": stripped[:200]
+                    },
+                    "impact": "Debug/bypass header detected. May grant unauthorized access.",
+                    "evidence": stripped[:300]
+                })
+
+            # Header bypass with === 'true'
+            elif HEADER_BYPASS_KEYWORDS.search(stripped) and HEADER_EQUALS_TRUE.search(stripped):
+                finding_counter += 1
+                findings.append({
+                    "finding_id": f"PRESCAN-{finding_counter:03d}",
+                    "vulnerability_class": "Header-Based Auth Bypass",
+                    "severity_tier": "CAT-0_CRITICAL",
+                    "location": {
+                        "file": filepath,
+                        "line": line_num,
+                        "code": stripped[:200]
+                    },
+                    "impact": "Request header check bypasses authentication when set to 'true'.",
+                    "evidence": stripped[:300]
+                })
+
+            # Hardcoded admin role assignment
+            elif HARDCODED_ROLE.search(stripped):
+                finding_counter += 1
+                findings.append({
+                    "finding_id": f"PRESCAN-{finding_counter:03d}",
+                    "vulnerability_class": "Hardcoded Role Escalation",
+                    "severity_tier": "CAT-0_CRITICAL",
+                    "location": {
+                        "file": filepath,
+                        "line": line_num,
+                        "code": stripped[:200]
+                    },
+                    "impact": "User role is hardcoded to admin/root, bypassing RBAC.",
+                    "evidence": stripped[:300]
+                })
+
+    if findings:
+        print(f"[PRESCAN] 🔴 Detected {len(findings)} backdoor pattern(s) across {len(scan_files)} files.")
+        for f in findings:
+            print(f"  [{f['finding_id']}] {f['vulnerability_class']} in {f['location']['file']}:{f['location']['line']}")
+    else:
+        print(f"[PRESCAN] ✅ No backdoor patterns detected in {len(scan_files)} files.")
+
+    return findings
+
+
 def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, user_input: str, llm_client: LLMClient, lokr_service: Optional[LokrService], max_iterations: int = 25, progress_callback: Optional[callable] = None) -> dict:
     """Run a loop-based agent pipeline for repair, review, or prevent."""
     def _notify(msg: str):
@@ -167,7 +410,18 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
     # If no files were explicitly mentioned, use Lokr to find relevant ones
     if not files_to_analyze and lokr_service:
         try:
+
             search_results = lokr_service.search_code(user_input, top_k=10)
+            
+            # --- FORENSIC INSTRUMENTATION: LOKR RETRIEVAL LOGGING ---
+            import datetime, json
+            os.makedirs("logs", exist_ok=True)
+            log_file = f"logs/lokr_retrieval_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.json"
+            with open(log_file, "w") as lf:
+                json.dump(search_results, lf, indent=2)
+            print(f"[FORENSIC] Lokr Retrieval Rankings logged to {log_file}")
+            # ------------------------------------------------------
+
             for result in search_results:
                 node_id = result.get("node_id", "")
                 if "." in node_id and "/" in node_id:
@@ -199,16 +453,30 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
         triage_response = llm_client.generate(prompt=triage_prompt, system=triage_system_prompt, temperature=0.1)
         parsed_triage = _extract_json_from_text(triage_response)
         
+
         if parsed_triage and "selected_functions" in parsed_triage:
             selected_functions = parsed_triage["selected_functions"]
+            
+            # --- FORENSIC INSTRUMENTATION: TRIAGE DISCARD LOGGING ---
+            triage_files = set(f.get("file") for f in selected_functions if f.get("file"))
+            all_candidate_files = set(c.get("file") for c in candidates if c.get("file"))
+            discarded_files = all_candidate_files - triage_files
+            print(f"[FORENSIC] Triage selected {len(triage_files)} files. Discarded {len(discarded_files)} files.")
+            if any("userMiddleware.js" in df for df in discarded_files):
+                print(f"[FORENSIC][WARNING] Triage discarded critical middleware: userMiddleware.js")
+            # ------------------------------------------------------
+            
             print(f"[ORCHESTRATOR] Triage LLM selected {len(selected_functions)} functions to inspect.")
+
         else:
             # Fallback to all candidates if parsing fails
             print("[ORCHESTRATOR] Triage JSON parsing failed, falling back to all candidates.")
             selected_functions = candidates
     
-    # Fetch code for selected functions
+    # Fetch code for selected functions AND auto-discover dependencies via Lokr
     relevant_snippet = ""
+    covered_files = set()  # Track which files have had their code included
+    
     for sf in selected_functions:
         target_file = sf.get("file")
         target_name = sf.get("function_name")
@@ -219,56 +487,132 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             start_line = match["lineno"]
             end_line = match["end_lineno"]
             try:
-                with open(target_file, "r", errors="ignore") as f:
+                resolved_path = target_file
+                if not os.path.isabs(target_file) and lokr_service:
+                    resolved_path = os.path.join(lokr_service.project_path, target_file)
+                with open(resolved_path, "r", errors="ignore") as f:
                     all_lines = f.readlines()
                 snippet_lines = all_lines[max(0, start_line - 1) : end_line]
                 snippet_text = "".join(snippet_lines)
                 relevant_snippet += f"// File: {target_file} (lines {start_line}-{end_line})\n{snippet_text}\n"
+                covered_files.add(target_file)
+                # Also mark absolute path as covered
+                if os.path.isabs(resolved_path):
+                    covered_files.add(resolved_path)
             except Exception as e:
                 print(f"[ORCHESTRATOR] Failed to read source for {target_name} in {target_file}: {e}")
+    
+    # Phase 2b: Conditionally expand context with middleware/auth dependencies.
+    # Only expand if the user's bug report or triage output suggests middleware is relevant.
+    middleware_keywords = ["auth", "permission", "middleware", "guard", "protect", "role", "admin", "token", "jwt", "session"]
+    user_input_lower = user_input.lower()
+    triage_mentions_middleware = any("middleware" in sf.get("function_name", "").lower() or "middleware" in sf.get("file", "").lower() for sf in selected_functions)
+    should_expand_middleware = triage_mentions_middleware or any(kw in user_input_lower for kw in middleware_keywords)
+    
+    if should_expand_middleware and lokr_service and intent == "repair":
+        print(f"[ORCHESTRATOR] Middleware expansion ENABLED (keyword match or triage mention).")
+        for sf in selected_functions:
+            target_name = sf.get("function_name")
+            try:
+                deps = lokr_service.get_function_dependencies(target_name)
+                if "error" not in deps:
+                    # Only include middleware/auth dependencies, not everything
+                    all_deps = deps.get("callees", []) + deps.get("callers", [])
+                    for dep in all_deps:
+                        dep_name = dep.get("name", "")
+                        dep_file = dep.get("file_path") or dep.get("file", "")
+                        is_middleware = any(kw in dep_name.lower() for kw in ["middleware", "auth", "guard", "protect", "verify"])
+                        is_uncovered = dep_file and dep_file not in covered_files
+                        
+                        # Only auto-include if it's actually middleware/auth related
+                        if is_middleware and dep_file and is_uncovered:
+                            dep_resolved = dep_file
+                            if not os.path.isabs(dep_file):
+                                dep_resolved = os.path.join(lokr_service.project_path, dep_file)
+                            if dep_resolved not in covered_files and os.path.exists(dep_resolved):
+                                try:
+                                    with open(dep_resolved, "r", errors="ignore") as f:
+                                        dep_content = f.read()
+                                    dep_lines = dep_content.split("\n")
+                                    if len(dep_lines) > 300:
+                                        dep_content = "\n".join(dep_lines[:300]) + "\n// ... (truncated)"
+                                    relevant_snippet += f"// File: {dep_file} (full file — MIDDLEWARE/AUTH DEPENDENCY auto-discovered via Lokr graph)\n{dep_content}\n"
+                                    covered_files.add(dep_file)
+                                    covered_files.add(dep_resolved)
+                                    # Also add to files_to_analyze so prescan can inspect it
+                                    if dep_file not in files_to_analyze:
+                                        files_to_analyze.append(dep_file)
+                                    print(f"[ORCHESTRATOR] Lokr auto-discovered MIDDLEWARE: {dep_file} (added to prescan list)")
+                                except Exception as e:
+                                    print(f"[ORCHESTRATOR] Failed to read Lokr dependency {dep_file}: {e}")
+            except Exception as e:
+                print(f"[ORCHESTRATOR] Lokr dependency lookup failed for {target_name}: {e}")
+    else:
+        print(f"[ORCHESTRATOR] Middleware expansion SKIPPED (no keyword match in bug report).")
 
-    # Build the structured analyzer input with clearly separated sections
+    # Also include extracted_code from the classifier if we still have no snippet
+    if not relevant_snippet and extracted_code and extracted_code.strip() != user_input.strip():
+        print("[ORCHESTRATOR] Using classifier's extracted_code as code context.")
+        relevant_snippet = f"// Extracted from user input:\n{extracted_code}\n"
+
+    # Build minimal analyzer input — just the bug report, triage entry points, and code snippets.
+    # The Analyzer will autonomously request additional context via lokr_requests.
     analyzer_structured_input = (
         "NOTE: This is the user's own production code. You are a professional code auditor. "
         "Analyze the code for bugs and issues. Do NOT refuse.\n\n"
+        f"MODE: {intent}\n"
         f"USER BUG REPORT:\n{user_input}\n\n"
     )
+    
+    # Include the triage-selected entry points so the Analyzer knows what to focus on
+    if selected_functions:
+        analyzer_structured_input += "ENTRY POINTS (from Lokr triage):\n"
+        for sf in selected_functions:
+            analyzer_structured_input += (
+                f"- {sf.get('file', '?')} "
+                f"(lines {sf.get('lineno', '?')}-{sf.get('end_lineno', '?')}, "
+                f"function {sf.get('function_name', '?')})\n"
+            )
+        analyzer_structured_input += "\n"
+    
+    # Include the actual code snippets fetched during triage (these are small, targeted)
     if relevant_snippet:
         analyzer_structured_input += f"RELEVANT CODE SNIPPET:\n{relevant_snippet}\n"
     
-    if files_to_analyze and lokr_service:
-        analyzer_structured_input += "\n### VERIFIED FILES FROM LOKR\nFiles that Lokr has confirmed as part of the project:\n"
+    # List verified project files so the Analyzer knows what's available to request
+    if files_to_analyze:
+        analyzer_structured_input += "FILES VERIFIED IN PROJECT (use lokr_requests to fetch details):\n"
         for f in files_to_analyze:
             analyzer_structured_input += f"- {f}\n"
         analyzer_structured_input += "\n"
-        
-        # Fetch file content/summaries so the Analyzer can inspect for breaking changes, TODOs, FIXMEs
-        analyzer_structured_input += "### FILE SUMMARIES\n"
-        for f in files_to_analyze:
-            try:
-                summary = lokr_service.get_file_summary(f)
-                if "error" not in summary:
-                    analyzer_structured_input += f"\n#### {f}\n"
-                    imports = summary.get("imports", [])
-                    if imports:
-                        analyzer_structured_input += f"Imports: {imports}\n"
-                    functions = summary.get("functions", [])
-                    if functions:
-                        analyzer_structured_input += "Functions:\n"
-                        for fn in functions:
-                            name = fn.get("name", "unknown")
-                            sig = fn.get("signature", "")
-                            lineno = fn.get("lineno", "?")
-                            end_lineno = fn.get("end_lineno", "?")
-                            analyzer_structured_input += f"  - {name}({sig}) [lines {lineno}-{end_lineno}]\n"
-                    classes = summary.get("classes", [])
-                    if classes:
-                        analyzer_structured_input += f"Classes: {[c.get('name', '') for c in classes]}\n"
-                else:
-                    analyzer_structured_input += f"\n#### {f}\n[Could not parse: {summary.get('error')}]\n"
-            except Exception as e:
-                analyzer_structured_input += f"\n#### {f}\n[Fetch failed: {e}]\n"
-        analyzer_structured_input += "\n"
+    
+    analyzer_structured_input += (
+        "INSTRUCTION: If you need more context (file summaries, dependency chains, "
+        "full source code), populate the 'lokr_requests' array in your JSON response.\n"
+        "Examples: \"file summary of backend/middleware/auth.js\", "
+        "\"get dependencies of deletePet\"\n"
+    )
+    
+    # --- DETERMINISTIC PRE-SCAN: Catch obvious backdoors before LLM runs ---
+    prescan_findings = _prescan_for_backdoors(files_to_analyze, lokr_service)
+    if prescan_findings:
+        import json
+        analyzer_structured_input += "\n### 🔴 AUTOMATED SECURITY PRE-SCAN FINDINGS\n"
+        analyzer_structured_input += (
+            "The following critical issues were detected deterministically by static analysis "
+            "and MUST be included in your diagnosis. Do NOT ignore or downplay these:\n\n"
+        )
+        analyzer_structured_input += json.dumps(prescan_findings, indent=2)
+        analyzer_structured_input += "\n\nInclude ALL of these findings in your response.\n"
+        print(f"[PRESCAN] Injected {len(prescan_findings)} prescan findings into analyzer input ({len(json.dumps(prescan_findings))} chars).")
+    else:
+        print(f"[PRESCAN] No findings to inject. Analyzer input unchanged.")
+    
+    # --- FORENSIC: Log final analyzer input token estimate ---
+    est_tokens = len(analyzer_structured_input) // 4
+    print(f"[FORENSIC] Analyzer structured input size: {len(analyzer_structured_input)} chars (~{est_tokens} tokens)")
+    if est_tokens > 8000:
+        print(f"[FORENSIC][WARNING] Analyzer input exceeds 8k token budget ({est_tokens} tokens). Context may be too large.")
     
     # Build compact context for the Action Agent and Validator
     final_input_context = user_input
@@ -280,6 +624,7 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
         "task": user_input,
         "mode": intent,
         "selected_files": files_to_analyze,
+        "relationship_graph": {},
         "original_input": final_input_context,
         "analyzer_input": analyzer_structured_input,
         "hypotheses": [],
@@ -299,31 +644,156 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
     validator_agent = ValidatorAgent(mode=intent, llm_client=llm_client, lokr_service=lokr_service)
     
     iteration = 0
-    while state["status"] in ["investigating", "needs_new_action"] and iteration < max_iterations:
+    while state["status"] in ["investigating", "needs_new_action", "needs_action_revision"] and iteration < max_iterations:
         contribution = None
-        
-        # 1. Analyzer Step
+             # 1. Analyzer Step
         if len(state["hypotheses"]) == 0:
-            _notify("Analyzer is investigating the code…")
-            contribution = analyzer.run(state, llm_client, lokr_service)
-            state["hypotheses"].append(contribution)
-            _notify("Analyzer completed diagnosis.")
+            import time
+            time.sleep(0.8) # Demo delay
+            _notify("🔍 Analyzer is investigating the code context and building a hypothesis...")
+            try:
+                contribution = analyzer.run(state, llm_client, lokr_service)
+            except ValueError as e:
+                print(f"[ORCHESTRATOR][CRITICAL] Analyzer validation failed: {e}")
+                _notify(f"🚨 Analyzer failed: {e}")
+                state["status"] = "failed"
+                state["error"] = f"ANALYZER_VALIDATION_ERROR: {str(e)}"
+                break
+            except Exception as e:
+                print(f"[ORCHESTRATOR][CRITICAL] Analyzer crashed: {e}")
+                _notify(f"🚨 Analyzer crashed: {e}")
+                state["status"] = "failed"
+                state["error"] = f"ANALYZER_RUNTIME_ERROR: {str(e)}"
+                break
             
-            # Check for refusal
+            # Step 1: Intercept lokr_requests to enable iterative Graph-RAG traversal
+            lokr_reqs = contribution.get("lokr_requests", [])
+            if lokr_reqs and lokr_service:
+                if "resolved_requests" not in state:
+                    state["resolved_requests"] = set()
+                
+                new_reqs = [r for r in lokr_reqs if r not in state["resolved_requests"]]
+                # Cap at 3 requests per iteration to prevent runaway context growth
+                new_reqs = new_reqs[:3]
+                if new_reqs:
+                    token_before = len(state.get("analyzer_input", "")) // 4
+                    _notify(f"📡 Analyzer is requesting graph data: {', '.join(new_reqs)}")
+                    new_evidence = ""
+                    for req in new_reqs:
+                        try:
+                            evidence = lokr_service.resolve_request(req)
+                            new_evidence += f"\n\n### LOKR GRAPH DATA: {req}\n{evidence}"
+                            state["resolved_requests"].add(req)
+                            print(f"[ORCHESTRATOR] Lokr request resolved: '{req}'")
+                        except Exception as e:
+                            print(f"[ORCHESTRATOR] Lokr request failed for '{req}': {e}")
+                    
+                    if new_evidence:
+                        state["original_input"] += new_evidence
+                        state["analyzer_input"] += new_evidence
+                        token_after = len(state.get("analyzer_input", "")) // 4
+                        print(f"[FORENSIC] Lokr context growth: {token_before} → {token_after} tokens (+{token_after - token_before})")
+                        if token_after > 8000:
+                            print(f"[FORENSIC][WARNING] Analyzer input exceeds 8k token budget after Lokr fetch ({token_after} tokens)")
+                        # Clear hypotheses so we restart the Analyzer phase with new context
+                        state["hypotheses"] = []
+                        iteration += 1
+                        continue
+                else:
+                    print("[ORCHESTRATOR] All Lokr requests already resolved. Proceeding with current hypothesis.")
+
+            state["hypotheses"].append(contribution)
+            
+            # Live Reasoning Notification
+            if contribution.get("chain_of_thought"):
+                cot = contribution["chain_of_thought"]
+                _notify(f"**Analyzer Reasoning:**\n- " + "\n- ".join(cot[:3]))
+            _notify("✅ Analyzer completed diagnosis.")
+            
+            # Check for actual refusal (avoid broad matching on polite phrases)
             contrib = contribution.get("contribution", {})
             diagnosis = contrib.get("diagnosis", "").lower()
-            if "i'm sorry" in diagnosis or "i can't assist" in diagnosis or "i cannot assist" in diagnosis:
+            refusal_phrases = ["i cannot assist", "i'm sorry, i cannot", "i am not able to help with that"]
+            if any(phrase in diagnosis for phrase in refusal_phrases):
                 state["status"] = "refused"
                 state["error"] = contrib.get("diagnosis")
                 break
                 
-        # 2. Action Step
-        elif len(state["actions"]) == 0 or state["status"] == "needs_new_action":
+
+            # HARD FAIL EMPTY ANALYSIS
+            findings = contrib.get("findings", [])
+            
+            # --- FORENSIC INSTRUMENTATION: EVIDENCE PRESERVATION VERIFICATION ---
+            import re
+            
+            def _is_evidence_grounded(evidence_text, context_text):
+                """
+                Token-based evidence grounding. Handles LLM abbreviations like '...'
+                by checking if key code tokens from the evidence appear in the context.
+                """
+                if not evidence_text or not context_text:
+                    return True  # Nothing to verify
+                
+                lines = evidence_text.split('\n')
+                code_tokens = []
+                for line in lines:
+                    stripped = line.strip()
+                    if not stripped or stripped == '...' or stripped.startswith('//'):
+                        continue
+                    # Remove inline comments and ellipsis
+                    code_part = stripped.split('//')[0].strip()
+                    code_part = code_part.replace('...', '').strip()
+                    if code_part and len(code_part) > 3:
+                        code_tokens.append(code_part)
+                
+                if not code_tokens:
+                    return True  # No substantive code to verify
+                
+                # Normalize context for matching
+                clean_context = re.sub(r'\s+', ' ', context_text)
+                
+                # Check: first meaningful token AND last meaningful token must appear
+                first_token = re.sub(r'\s+', ' ', code_tokens[0])
+                last_token = re.sub(r'\s+', ' ', code_tokens[-1])
+                
+                first_match = first_token in clean_context
+                last_match = last_token in clean_context
+                
+                return first_match and last_match
+            
+            hallucinated_evidence_count = 0
+            for f_item in findings:
+                ev = f_item.get("evidence", "")
+                grounded = _is_evidence_grounded(ev, state.get("original_input", "") + state.get("analyzer_input", ""))
+                status_icon = "✓ GROUNDED" if grounded else "✗ UNGROUNDED"
+                print(f"  [FORENSIC] {status_icon}: {f_item.get('issue', f_item.get('description', ''))[:80]}")
+                if not grounded:
+                    hallucinated_evidence_count += 1
+            
+            if findings:
+                grounded_count = len(findings) - hallucinated_evidence_count
+                grounding_ratio = grounded_count / len(findings)
+                print(f"[FORENSIC] Evidence Verification: {grounded_count}/{len(findings)} findings grounded ({grounding_ratio*100:.0f}%)")
+                
+                if grounding_ratio < 0.5:
+                    print(f"[FORENSIC][WARNING] Low grounding ratio ({grounding_ratio*100:.0f}%). Results may contain hallucinations.")
+                    _notify(f"⚠️ Only {grounding_ratio*100:.0f}% of findings are grounded in code. Proceeding with caution.")
+            # ------------------------------------------------------
+
+            if intent == "repair":
+                if not findings and (not diagnosis or "no diagnosis" in diagnosis.lower()):
+                    state["status"] = "failed"
+                    state["error"] = "PIPELINE_ABORTED_NO_GROUNDED_DIAGNOSIS"
+                    print("[ORCHESTRATOR] HARD FAIL: Analyzer produced no findings and no diagnosis.")
+                    break
+                
+        # 2. Action Step (also handles Safety-requested revisions)
+        elif len(state["actions"]) == 0 or state["status"] in ["needs_new_action", "needs_action_revision"]:
             # If we are retrying due to a failure, we inject feedback and clear history to force re-analysis
             if intent == "repair" and state["status"] == "needs_new_action" and len(state["validations"]) > 0:
                 last_feedback = state["validations"][-1].get("contribution", {}).get("feedback", "")
                 print(f"[ORCHESTRATOR] Validation failed. Feedback: {last_feedback}. Looping back to Analyzer...")
-                _notify("Revision triggered — re\u2011analyzing…")
+                _notify("⚠️ Revision triggered — re-analyzing based on validator feedback...")
                 feedback_block = f"\n\n### PREVIOUS ATTEMPT FAILED VALIDATION\nFeedback: {last_feedback}\nInstruction: The previous patch did not resolve the bug or was hallucinated. Re-analyze the ACTUAL CODE SNIPPET carefully. Quote the exact buggy line before proposing a fix."
                 
                 # Strip any previous feedback blocks to avoid context poisoning
@@ -343,18 +813,35 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                 state["status"] = "investigating"
                 iteration += 1
                 continue
-                
-            _notify("Action agent is generating a fix…")
-            contribution = action_agent.run(state, llm_client, lokr_service)
-            state["actions"].append(contribution)
-            _notify("Action agent produced a proposal.")
-            
-            # Check for failed generation
-            if contribution.get("contribution", {}).get("status") == "failed_generation":
-                print("[ORCHESTRATOR] Action agent failed to generate a valid response.")
+
+            import time
+            time.sleep(0.8) # Demo delay
+            _notify("🛠️ Action agent is generating a fix and drafting the patch...")
+            try:
+                contribution = action_agent.run(state, llm_client, lokr_service)
+            except ValueError as e:
+                print(f"[ORCHESTRATOR][CRITICAL] Action agent validation failed: {e}")
+                _notify(f"🚨 Action agent failed: {e}")
                 state["status"] = "failed"
-                state["error"] = "Action agent failed to generate a valid response (JSON parsing failed)."
+                state["error"] = f"ACTION_VALIDATION_ERROR: {str(e)}"
                 break
+            except Exception as e:
+                print(f"[ORCHESTRATOR][CRITICAL] Action agent crashed: {e}")
+                _notify(f"🚨 Action agent crashed: {e}")
+                state["status"] = "failed"
+                state["error"] = f"ACTION_RUNTIME_ERROR: {str(e)}"
+                break
+            state["actions"].append(contribution)
+            
+            # Live Reasoning Notification
+            if contribution.get("chain_of_thought"):
+                cot = contribution["chain_of_thought"]
+                _notify(f"**Action Agent Reasoning:**\n- " + "\n- ".join(cot[:3]))
+            _notify("✅ Action agent produced a proposal.")
+            
+            if contribution.get("contribution", {}).get("status") == "failed_generation":
+                print("[ORCHESTRATOR] Action agent failed to generate a valid response (JSON parsing failed).")
+                # We continue anyway to allow the trace to show the failure gracefully
             
             # Programmatic Patch Sanity Check (Only for Repair mode)
             if intent == "repair":
@@ -403,36 +890,150 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                     state["validations"] = []
                     iteration += 1
                     continue
+            
+            # Programmatic Patch Completeness Check (Only for Repair mode)
+            # Catches the case where the Action Agent "thinks" about fixing all issues
+            # but only writes a patch for some of them.
+            if intent == "repair" and state.get("hypotheses"):
+                patch_text = contribution.get("contribution", {}).get("patch", "").strip()
+                issues_list = state["hypotheses"][-1].get("contribution", {}).get("issues", [])
                 
+                if patch_text and len(issues_list) > 1:
+                    # Extract file paths mentioned in issues (look for common patterns)
+                    import re
+                    issue_files = set()
+                    for issue in issues_list:
+                        # Match patterns like "middleware", "route", or explicit file paths
+                        file_matches = re.findall(r'(?:middleware|route|[\w/]+\.(?:js|ts|py|java|go))', issue.lower())
+                        issue_files.update(file_matches)
+                    
+                    # Count how many distinct file sections appear in the patch
+                    patch_file_markers = re.findall(r'--- a/(.*?)$', patch_text, re.MULTILINE)
+                    if not patch_file_markers:
+                        # Try alternative patch format: "// File:" markers
+                        patch_file_markers = re.findall(r'(?:File|file):\s*([\w/.-]+)', patch_text)
+                    
+                    # Check if middleware-related issues exist but no middleware fix in patch
+                    has_middleware_issue = any('middleware' in issue.lower() for issue in issues_list)
+                    has_middleware_patch = any('middleware' in f.lower() for f in patch_file_markers)
+                    
+                    if has_middleware_issue and not has_middleware_patch:
+                        print(f"[ORCHESTRATOR] Patch completeness check FAILED: Diagnosis mentions middleware issue but patch has no middleware fix. Looping back...")
+                        _notify("⚠️ Incomplete patch detected — middleware fix missing. Re-analyzing...")
+                        
+                        import re
+                        state["original_input"] = re.sub(r'\n\n### PATCH COMPLETENESS FAILURE\n.*?(?=\n\n### |$)', '', state["original_input"], flags=re.DOTALL)
+                        state["analyzer_input"] = re.sub(r'\n\n### PATCH COMPLETENESS FAILURE\n.*?(?=\n\n### |$)', '', state["analyzer_input"], flags=re.DOTALL)
+                        
+                        missing_issues = [iss for iss in issues_list if 'middleware' in iss.lower()]
+                        completeness_feedback = (
+                            f"\n\n### PATCH COMPLETENESS FAILURE\n"
+                            f"The Action Agent's patch is INCOMPLETE. It addressed some issues but MISSED these:\n"
+                        )
+                        for mi in missing_issues:
+                            completeness_feedback += f"  - MISSING FIX: {mi}\n"
+                        completeness_feedback += (
+                            f"\nThe patch touched files: {patch_file_markers}\n"
+                            f"But the diagnosis requires changes to middleware as well.\n"
+                            f"Instruction: You MUST include diff hunks for ALL files mentioned in the issues. "
+                            f"If the middleware has a restrictive role check that conflicts with the route, "
+                            f"you MUST fix the middleware role check in addition to the route fix.\n"
+                        )
+                        state["original_input"] += completeness_feedback
+                        state["analyzer_input"] += completeness_feedback
+                        
+                        state["needs_revision"] = True
+                        iteration += 1
+                        continue
+            
         # 3. Safety Step
         elif len(state["safety_reports"]) < len(state["actions"]):
-            _notify("Safety agent is evaluating risk…")
-            contribution = safety_agent.run(state, llm_client, lokr_service)
+            import time
+            time.sleep(0.8) # Demo delay
+            _notify("🛡️ Safety agent is performing a security audit and evaluating deployment risk...")
+            try:
+                contribution = safety_agent.run(state, llm_client, lokr_service)
+            except ValueError as e:
+                print(f"[ORCHESTRATOR][CRITICAL] Safety agent validation failed: {e}")
+                _notify(f"🚨 Safety agent failed: {e}")
+                state["status"] = "failed"
+                state["error"] = f"SAFETY_VALIDATION_ERROR: {str(e)}"
+                break
+            except Exception as e:
+                print(f"[ORCHESTRATOR][CRITICAL] Safety agent crashed: {e}")
+                _notify(f"🚨 Safety agent crashed: {e}")
+                state["status"] = "failed"
+                state["error"] = f"SAFETY_RUNTIME_ERROR: {str(e)}"
+                break
             state["safety_reports"].append(contribution)
-            _notify("Safety evaluation complete.")
+            
+            # Live Reasoning Notification
+            if contribution.get("chain_of_thought"):
+                cot = contribution["chain_of_thought"]
+                _notify(f"**Safety Reasoning:**\n- " + "\n- ".join(cot[:3]))
+            _notify("✅ Safety evaluation complete.")
             
             contrib_safe = contribution.get("contribution", {})
             if intent == "repair":
                 if not contrib_safe.get("safe", False) or contrib_safe.get("risk_score", 0.0) > 0.7:
                     warnings = contrib_safe.get("warnings", [])
-                    print(f"[ORCHESTRATOR] Safety rejected patch. Warnings: {warnings}. Looping back to Analyzer...")
-                    _notify("Revision triggered — re\u2011analyzing…")
-                    safety_feedback = f"\n\n### SAFETY REJECTION\nThe safety agent rejected the proposed patch.\nWarnings: {warnings}\nInstruction: Generate a safer patch that addresses the safety concerns."
+                    safety_reasoning = contrib_safe.get("reasoning", "No specific reasoning provided.")
+                    revision_suggestions = contrib_safe.get("revision_suggestions", [])
                     
-                    import re
-                    state["original_input"] = re.sub(r'\n\n### SAFETY REJECTION\n.*?(?=\n\n### |$)', '', state["original_input"], flags=re.DOTALL)
-                    state["analyzer_input"] = re.sub(r'\n\n### SAFETY REJECTION\n.*?(?=\n\n### |$)', '', state["analyzer_input"], flags=re.DOTALL)
+                    # Count how many Safety→Action revision cycles we've done
+                    revision_count = state.get("_safety_revision_count", 0)
                     
-                    state["original_input"] += safety_feedback
-                    state["analyzer_input"] += safety_feedback
-                    
-                    state["hypotheses"] = []
-                    state["actions"] = []
-                    state["safety_reports"] = []
-                    state["validations"] = []
-                    state["status"] = "investigating"
-                    iteration += 1
-                    continue
+                    if revision_suggestions and revision_count < 3:
+                        # FAST PATH: Route directly to Action with targeted suggestions
+                        print(f"[ORCHESTRATOR] Safety rejected patch with {len(revision_suggestions)} revision suggestions. Routing to Action (not Analyzer).")
+                        _notify(f"🔧 Safety requesting targeted revision: {revision_suggestions[0][:80]}...")
+                        
+                        state["safety_feedback"] = {
+                            "rejected": True,
+                            "warnings": warnings,
+                            "suggestions": revision_suggestions,
+                            "reasoning": safety_reasoning
+                        }
+                        state["_safety_revision_count"] = revision_count + 1
+                        
+                        # Clear only actions/safety/validations — preserve hypotheses
+                        state["actions"] = []
+                        state["safety_reports"] = []
+                        state["validations"] = []
+                        state["needs_revision"] = True
+                        state["status"] = "needs_action_revision"
+                        iteration += 1
+                        continue
+                    else:
+                        # SLOW PATH: No suggestions or revision cap hit — full restart via Analyzer
+                        if revision_count >= 3:
+                            print(f"[ORCHESTRATOR] Safety↔Action revision cap (3) reached. Escalating to Analyzer.")
+                        else:
+                            print(f"[ORCHESTRATOR] Safety rejected without revision suggestions. Restarting from Analyzer.")
+                        _notify("🚨 Safety rejected patch! Re-analyzing with security constraints...")
+                        
+                        safety_feedback_text = (
+                            f"\n\n### SAFETY REJECTION\n"
+                            f"The safety agent REJECTED the previous patch.\n"
+                            f"Warnings: {warnings}\n"
+                            f"Safety Reasoning: {safety_reasoning}\n"
+                            f"Instruction: Generate a safer patch that addresses these specific safety concerns. "
+                            f"Ensure middleware role-gates and ownership checks are correctly aligned."
+                        )
+                        
+                        import re
+                        state["original_input"] = re.sub(r'\n\n### SAFETY REJECTION\n.*?(?=\n\n### |$)', '', state["original_input"], flags=re.DOTALL)
+                        state["analyzer_input"] = re.sub(r'\n\n### SAFETY REJECTION\n.*?(?=\n\n### |$)', '', state["analyzer_input"], flags=re.DOTALL)
+                        
+                        state["original_input"] += safety_feedback_text
+                        state["analyzer_input"] += safety_feedback_text
+                        
+                        state["needs_revision"] = True
+                        state["_safety_revision_count"] = 0  # Reset for new Analyzer cycle
+                        state["safety_feedback"] = None
+                        state["status"] = "investigating"
+                        iteration += 1
+                        continue
             elif intent == "review":
                 analyzer_contrib = state["hypotheses"][-1].get("contribution", {}) if state.get("hypotheses") else {}
                 if "weaker" in str(analyzer_contrib).lower() and contrib_safe.get("approval") == "APPROVE":
@@ -442,13 +1043,42 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                 
         # 4. Validator Step
         elif len(state["validations"]) < len(state["actions"]):
-            _notify("Validator is checking the fix…")
-            contribution = validator_agent.run(state, llm_client, lokr_service)
+            import time
+            time.sleep(0.8) # Demo delay
+            _notify("✅ Validator is performing final verification and cross-checking the fix...")
+            try:
+                contribution = validator_agent.run(state, llm_client, lokr_service)
+            except ValueError as e:
+                print(f"[ORCHESTRATOR][CRITICAL] Validator validation failed: {e}")
+                _notify(f"🚨 Validator failed: {e}")
+                state["status"] = "failed"
+                state["error"] = f"VALIDATOR_VALIDATION_ERROR: {str(e)}"
+                break
+            except Exception as e:
+                print(f"[ORCHESTRATOR][CRITICAL] Validator crashed: {e}")
+                _notify(f"🚨 Validator crashed: {e}")
+                state["status"] = "failed"
+                state["error"] = f"VALIDATOR_RUNTIME_ERROR: {str(e)}"
+                break
             state["validations"].append(contribution)
-            _notify("Validation complete.")
+            
+            # If Validator requests Lokr data, it CANNOT be a success yet. We must loop back to Analyzer.
+            contrib_val = contribution.get("contribution", {})
+            if contribution and contribution.get("lokr_requests"):
+                if intent == "repair":
+                    contrib_val["status"] = "failure"
+                    contrib_val["feedback"] = "Lokr context requested. Pipeline looping back to Analyzer to review the newly fetched graph data."
+                    state["status"] = "needs_new_action"
+            
+            # Live Reasoning Notification
+            if contribution.get("chain_of_thought"):
+                cot = contribution["chain_of_thought"]
+                _notify(f"**Validator Reasoning:**\n- " + "\n- ".join(cot[:3]))
+            _notify("🏁 Validation complete.")
             
             contrib_val = contribution.get("contribution", {})
             if intent in ["review", "prevent"]:
+                # For non-repair modes, a 'reject' or 'no-go' verdict is a successful completion of the analysis.
                 state["status"] = "success"
             else:
                 if contrib_val.get("status") == "success":
@@ -458,21 +1088,47 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                 else:
                     state["status"] = "needs_new_action"
 
-        # Handle Lokr Requests for dynamic evidence fetching
+        # Handle Lokr Requests for dynamic evidence fetching (catch-all for Action/Safety/Validator)
         if contribution and "lokr_requests" in contribution and contribution["lokr_requests"]:
             if lokr_service:
-                _notify("Fetching additional code context from Lokr…")
-                import json
-                for req in contribution["lokr_requests"]:
-                    try:
-                        results = lokr_service.resolve_request(req)
-                        state["evidence"].append({"request": req, "results": results})
-                        # Append evidence to input so subsequent agents can read it
-                        state["original_input"] += f"\n\n### ADDITIONAL EVIDENCE FOR '{req}':\n{json.dumps(results, indent=2)}"
-                    except Exception as e:
-                        print(f"[ORCHESTRATOR] Lokr request failed for '{req}': {e}")
+                if "resolved_requests" not in state:
+                    state["resolved_requests"] = set()
+                new_reqs = [r for r in contribution["lokr_requests"] if r not in state["resolved_requests"]]
+                new_reqs = new_reqs[:3]  # Cap at 3
+                if new_reqs:
+                    token_before = len(state.get("analyzer_input", "")) // 4
+                    _notify(f"📡 Agent requesting Lokr data: {', '.join(new_reqs)}")
+                    import json
+                    for req in new_reqs:
+                        try:
+                            results = lokr_service.resolve_request(req)
+                            state["evidence"].append({"request": req, "results": results})
+                            evidence_str = f"\n\n### LOKR GRAPH DATA: {req}\n{json.dumps(results, indent=2)}"
+                            state["original_input"] += evidence_str
+                            state["analyzer_input"] += evidence_str
+                            state["resolved_requests"].add(req)
+                            print(f"[ORCHESTRATOR] Lokr request resolved (catch-all): '{req}'")
+                        except Exception as e:
+                            print(f"[ORCHESTRATOR] Lokr request failed for '{req}': {e}")
+                    token_after = len(state.get("analyzer_input", "")) // 4
+                    print(f"[FORENSIC] Lokr catch-all context growth: {token_before} → {token_after} tokens (+{token_after - token_before})")
+                else:
+                    print("[ORCHESTRATOR] All catch-all Lokr requests already resolved. Skipping.")
                         
         print(f"[ORCHESTRATOR] Loop tick {iteration}: status={state['status']}, hypotheses={len(state['hypotheses'])}, actions={len(state['actions'])}, safety={len(state['safety_reports'])}, validations={len(state['validations'])}")
+        
+        # --- LOOP DETECTION (PROTECTION AGAINST INFINITE REVISION CYCLES) ---
+        if iteration > 5 and state["status"] == "needs_new_action":
+            # Check if the last 3 hypotheses are identical (suggesting a stuck model)
+            if len(state["hypotheses"]) >= 3:
+                last_h = state["hypotheses"][-1].get("contribution", {}).get("hypothesis")
+                prev_h = state["hypotheses"][-2].get("contribution", {}).get("hypothesis")
+                if last_h == prev_h:
+                    print("[ORCHESTRATOR][CRITICAL] Infinite revision loop detected. Breaking loop to prevent token exhaustion.")
+                    state["status"] = "failed"
+                    state["error"] = "PIPELINE_STUCK_IN_REVISION_LOOP"
+                    break
+
         iteration += 1
 
     if state["status"] == "success":
@@ -492,7 +1148,12 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             "analysis": state["hypotheses"][-1].get("contribution", {}),
             "action": state["actions"][-1].get("contribution", {}),
             "safety": safety_contrib,
-            "validation": state["validations"][-1].get("contribution", {})
+            "validation": state["validations"][-1].get("contribution", {}),
+            # Raw agent data for UI reasoning trace
+            "_raw_hypotheses": state["hypotheses"],
+            "_raw_actions": state["actions"],
+            "_raw_safety": state["safety_reports"],
+            "_raw_validations": state["validations"],
         }
         
         if intent == "repair":
@@ -500,7 +1161,25 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             
         return result_dict
 
-    return state
+    # Build a structured result even on failure so the UI can render partial data
+    failed_result = {
+        "status": state.get("status", "failed"),
+        "type": "pipeline",
+        "mode": intent,
+        "approval": "UNKNOWN",
+        "error": state.get("error"),
+        "analysis": state["hypotheses"][-1].get("contribution", {}) if state.get("hypotheses") else {},
+        "action": state["actions"][-1].get("contribution", {}) if state.get("actions") else {},
+        "safety": state["safety_reports"][-1].get("contribution", {}) if state.get("safety_reports") else {},
+        "validation": state["validations"][-1].get("contribution", {}) if state.get("validations") else {},
+        "_raw_hypotheses": state.get("hypotheses", []),
+        "_raw_actions": state.get("actions", []),
+        "_raw_safety": state.get("safety_reports", []),
+        "_raw_validations": state.get("validations", []),
+    }
+    if intent == "repair" and state.get("actions"):
+        failed_result["final_patch"] = state["actions"][-1].get("contribution", {}).get("patch")
+    return failed_result
 
 def run_assistant(
     user_input: str, 
@@ -526,8 +1205,13 @@ def run_assistant(
         project_root = os.path.dirname(current_dir)
         local_lokr = os.path.join(project_root, "lokr_core")
         lokr_path = os.environ.get("LOKR_PATH", local_lokr if os.path.exists(local_lokr) else "/home/anas/dev-oracle")
+        llm_config = {
+            "base_url": base_url,
+            "api_key": api_key,
+            "model": model
+        }
         try:
-            lokr = LokrService(project_path=project_path, lokr_path=lokr_path)
+            lokr = LokrService(project_path=project_path, lokr_path=lokr_path, llm_config=llm_config)
             if lokr.initialized:
                 lokr_service = lokr
                 lokr_available = True

@@ -49,16 +49,23 @@ Do NOT output a bug diagnosis or a patch.
 Output Format (JSON ONLY):
 {{
     "chain_of_thought": [
-        "1. Do I have Lokr context or git data?",
-        "2. What are the actual files changed in 'selected_files'?",
-        "3. Based on these files, what is the impact (breaking changes, TODOs)?",
-        "4. Can I trust the user's claim about CI status based on the safe nature of these files?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
         "commits_since_deploy": null,
         "files_changed": ["list of changed files"],
-        "breaking_changes": ["any breaking changes identified"],
-        "outstanding_todos": ["TODO/FIXME items found"],
+        "execution_trace": "Request enters: [file] -> Condition: [code] -> Then route: [file] -> Condition: [code] -> Result: [outcome]",
+        "findings": [
+            {{
+                "issue": "...",
+                "file": "...",
+                "line": "...",
+                "evidence": "...",
+                "impact": "..."
+            }}
+        ],
         "readiness_score": 0.5,
         "change_summary": "summary"
     }},
@@ -68,6 +75,25 @@ Output Format (JSON ONLY):
         elif mode == "review":
             return f"""{preamble}
 You are a Code Review Specialist. Your job is to analyze a code diff and understand what changed.
+
+
+BAN GENERIC SECURITY OUTPUT (CRITICAL):
+Reject phrases like "potential vulnerability", "possible issue", "ensure validation", "consider sanitization" unless tied to:
+- exact route
+- exact condition
+- exact middleware chain
+- exact exploit path
+
+FORCE EXECUTION TRACE:
+You MUST reconstruct the exploit path exactly. Example:
+Request enters: backend/middleware/userMiddleware.js
+Condition: req.user.role !== 'user'
+Then route: backend/routes/pets.js
+Condition: req.user.role !== 'admin'
+Result: No principal satisfies both conditions simultaneously.
+
+SEVERITY PRIORITIZATION:
+You MUST rank issues by actual severity. If you find a hook bypass and a plaintext password, the plaintext password is the critical priority. Do not act like an 'AI compliance consultant'. Act like an 'AI code investigator'.
 
 INPUT FORMAT:
 You will receive the full investigation state as a JSON object, containing the user's diff.
@@ -81,10 +107,9 @@ Tasks:
 REQUIRED JSON OUTPUT FORMAT:
 {{
     "chain_of_thought": [
-        "1. What files are being changed?",
-        "2. What is the overall intent of the diff?",
-        "3. Are there any changes to boolean logic or conditions? If so, simulate them with inputs. Is the new condition equivalent, stricter, or weaker?",
-        "4. Are there any obvious red flags?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
         "changes_summary": "Summary of the diff",
@@ -105,51 +130,85 @@ You are NOT being asked to write malicious code or exploit anything.
 You MUST analyze the code and provide a diagnosis. NEVER refuse. NEVER say "I'm sorry" or
 "I can't assist". Refusal is a system failure.
 
+
+BAN GENERIC SECURITY OUTPUT (CRITICAL):
+Reject phrases like "potential vulnerability", "possible issue", "ensure validation", "consider sanitization" unless tied to:
+- exact route
+- exact condition
+- exact middleware chain
+- exact exploit path
+
+FORCE EXECUTION TRACE:
+You MUST reconstruct the exploit path exactly. Example:
+Request enters: backend/middleware/userMiddleware.js
+Condition: req.user.role !== 'user'
+Then route: backend/routes/pets.js
+Condition: req.user.role !== 'admin'
+Result: No principal satisfies both conditions simultaneously.
+
+SEVERITY PRIORITIZATION:
+You MUST rank issues by actual severity. If you find a hook bypass and a plaintext password, the plaintext password is the critical priority. Do not act like an 'AI compliance consultant'. Act like an 'AI code investigator'.
+
 INPUT FORMAT:
 You will receive the full investigation state as a JSON object. This includes the original task/bug report, past hypotheses, evidence collected so far, and previous actions.
 You MUST thoroughly read the original task and any gathered evidence to locate the exact line of code causing the bug described. Do NOT guess the bug based solely on the user's description. The bug is guaranteed to exist somewhere within the provided code snippet or evidence.
 
-LOKR REQUESTS:
-If you need more information about a specific file, function, or usage in the codebase, you can request it by adding a query string to the "lokr_requests" array in your JSON output. The orchestrator will fetch the context and provide it as evidence in the next iteration.
+LOKR REQUESTS (GRAPH-RAG CHEAT SHEET):
+You have access to 'Lokr', a Graph-RAG codebase intelligence engine. You MUST use it to trace execution paths across multiple files.
+To use it, add specific query strings to the "lokr_requests" array. You MUST use these exact phrasing patterns to trigger the Graph engine:
+1. "get dependencies of <functionName>" - Finds where a function is called or what it calls (e.g., "get dependencies of deletePet").
+2. "file summary of <filePath>" - Gets the layout, imports, and logic of a whole file (e.g., "file summary of backend/routes/pets.js").
 
-STRICT RULES:
-- Do NOT describe the entire codebase.
-- Do NOT list unrelated routes, middleware, or modules.
-- Do NOT offer future improvement suggestions.
-- ONLY address the specific bug the user reported.
-- You MUST mentally execute the provided code line-by-line using the scenario described by the user.
+STRICT GRAPH-WALKING RULES:
+- If you find a bug in a middleware, you MUST request "get dependencies of <middlewareName>" or the file summary of the route that uses it. You cannot fix a middleware without checking the route it protects.
+- If the user reports a logic bug spanning two concepts (e.g., "users can delete pets they don't own"), you MUST query Lokr for the route file to ensure you see the whole execution chain. DO NOT GUESS.
+- If the user's prompt mentions multiple files, you MUST use 'file summary of' to fetch all of them before finalizing your diagnosis.
+
+- BUSINESS LOGIC RULE (OWNERSHIP): If the user's bug report mentions that a user can interact with (e.g., delete, edit) something "they don't own," the core bug is a MISSING OWNERSHIP CHECK. You MUST look for or add logic that compares the resource's owner ID to the requesting user's ID (e.g., `if (resource.owner.toString() !== req.user.id)`). Do NOT just restrict the route to "admins" and call it a day. Users must be able to manage their own resources.
 - Pay extreme attention to logical operators (=== vs !==, && vs ||), early returns, and state conditions in the backend routes.
-- ENFORCE SEMANTIC VALIDATION: You must actively look for contradictions between comments/messages and operators. 
-  - If a message says "already matches" BUT the code uses `!==` (they are NOT equal), that's a direct contradiction and represents an operator inversion bug.
-  - If a message says "inactive users should be blocked" BUT the code uses `if (user.isActive)`, that's a boolean inversion bug.
-  - If the code says `owner: req.params.scheduleId` in a POST route that has `owner` in the body, that is a wrong variable reference.
-- Do not immediately blame the frontend UI if the backend route contains a clear logic error.
-- Do NOT invent "missing validation" issues unless the user specifically states that invalid/malformed data is bypassing the system. If the code already has validation, read it carefully before claiming it doesn't.
+- **RED-TEAM CHALLENGE (CRITICAL)**: Before finalizing your diagnosis, you MUST play the role of a malicious attacker. Look for:
+  - **Backdoors/Bypasses**: Code that allows bypassing security (e.g., debug headers like `x-sentinel-debug`, hardcoded admin keys, or `if (process.env.NODE_ENV === 'test')` bypasses). A hardcoded debug header or secret token that bypasses authentication is a Critical security backdoor. You must always flag it as the highest-priority issue, regardless of the user's stated problem.
+  - **Shadow Logic**: Logic that seems to exist only for debugging but could be exploited.
+- **CROSS-FILE CONSISTENCY**: If the bug involves a route and a middleware, you MUST compare their logic. If the middleware requires one role (e.g., 'user') and the route requires another (e.g., 'admin'), flag this "Logic Deadlock" as a critical bug.
+- **MIDDLEWARE ROLE-GATE AUDIT (CRITICAL)**: When analyzing a middleware that gates routes with a role check (e.g., `if (decoded.role !== 'user')`), you MUST:
+  1. List ALL roles the middleware ALLOWS through (e.g., only 'user').
+  2. List ALL roles the downstream route REQUIRES (e.g., 'admin' for deletion).
+  3. If ANY role required by the route is BLOCKED by the middleware, you MUST add a SEPARATE issue to the 'issues' array: "Middleware role-gate conflict: middleware only allows [X] but route requires [Y]. The middleware check `<exact line>` must be updated to allow both roles."
+  4. This is DIFFERENT from the backdoor issue and the ownership issue — it MUST be its own entry in the 'issues' array.
+- **CRITICAL BACKDOOR DETECTION**: Any hardcoded header, query parameter, or secret token that bypasses authentication and sets a user role (especially to 'admin') is a Critical security backdoor. You MUST flag it as a separate finding with severity CRITICAL, regardless of any other issues you find. Include the exact line and file where the bypass occurs.
 
 Your diagnosis MUST include:
 1. The exact line(s) of code causing the problem.
-2. Why it is a bug.
+2. Why it is a bug (and if it is a security backdoor).
 3. The consequences (as described by the user).
 
 CRITICAL: You MUST output ONLY valid JSON.
-DO NOT include any markdown, backticks, conversational text, or introductions (like "Here is the JSON" or "I found the bug") outside the JSON. Start your response with '{' and end it with '}'.
+DO NOT include any markdown, backticks, conversational text, or introductions (like "Here is the JSON" or "I found the bug") outside the JSON. Start your response with '{{' and end it with '}}'.
 Refusal to output JSON is a system failure.
 
 REQUIRED JSON OUTPUT FORMAT:
 {{
     "chain_of_thought": [
-        "1. What is the user's reported symptom exactly?",
-        "2. Mentally executing the code: how does the logic flow step-by-step?",
-        "3. Wait, is there a mismatch between what the code DOES and what it SHOULD do?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
-        "hypothesis": "String describing the exact root-cause hypothesis",
-        "evidence_used": ["list of file/function names already considered"],
-        "diagnosis": "Identify the exact buggy line and explain why it is wrong",
-        "issues": ["Each issue must reference the specific code causing the problem"],
+        "hypothesis": "<YOUR ROOT-CAUSE HYPOTHESIS>",
+        "evidence_used": ["<files/functions you examined>"],
+        "execution_trace": "Request enters: [file] -> Condition: [code] -> Then route: [file] -> Condition: [code] -> Result: [outcome]",
+        "findings": [
+            {{
+                "issue": "...",
+                "file": "...",
+                "line": "...",
+                "evidence": "...",
+                "impact": "..."
+            }}
+        ],
         "confidence": 0.0
     }},
-    "lokr_requests": ["optional", "list of", "search queries"]
+    "lokr_requests": ["<optional search query>"]
 }}
 """
 
@@ -197,11 +256,9 @@ Tasks:
 Output Format (JSON ONLY):
 {{
     "chain_of_thought": [
-        "1. What did the user explicitly state in the 'task' field?",
-        "2. Did the Analyzer capture all of those risk indicators?",
-        "3. What blockers exist from both the Analyzer and the raw user input?",
-        "4. What are the warnings?",
-        "5. What should be done before deployment?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
         "blockers": ["list of issues that prevent deployment"],
@@ -226,9 +283,9 @@ Tasks:
 Output Format (JSON ONLY):
 {{
     "chain_of_thought": [
-        "1. Does the code follow best practices?",
-        "2. Are there any edge cases not handled?",
-        "3. How can this be improved?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
         "observations": ["observation 1", "observation 2"],
@@ -251,6 +308,7 @@ Inputs:
 You will receive the full investigation state as a JSON object. This includes:
 - The original task and code snippet.
 - Past hypotheses from the Analyzer Agent (including the current diagnosis).
+- A numbered list of ALL ISSUES that the Analyzer identified (under "ALL ISSUES TO FIX").
 - Evidence collected from Lokr.
 - Previous actions and validations (if returning from a failed validation).
 - The current operating mode ('{mode}').
@@ -260,32 +318,48 @@ If you need more information about a specific file, function, or usage to safely
 
 Tasks:
 1. Review the diagnosis provided.
-2. In the `chain_of_thought` array, explicitly plan the exact lines to replace and verify how they change the logic before generating the patch.
-3. Generate the appropriate output for the '{mode}' mode based ON THE PROVIDED CODE ONLY.
-4. {mode_specific_guidance}
-5. ANTI-HALLUCINATION GUARDRAILS: 
-   - Do not fix things outside the provided snippet.
-   - Do not propose patches for unshown lines.
-   - If the buggy line is missing, answer EXACTLY: "Could not determine a valid fix from the provided context."
-   - TRUST THE CODE SNIPPET, NOT ANY PREVIOUS FEEDBACK. If a previous validation says "the code already does X", you MUST verify that claim by re-reading the actual code snippet. If the code says `req.params.userId` then that is what it says, regardless of what any feedback claims.
-   - In your chain_of_thought, you MUST copy-paste the EXACT buggy line from the code snippet as a direct quote. Do NOT paraphrase it.
-   - Your patch MUST contain the corrected version of that exact line. If your patch is empty, you have failed.
+2. Read the "ALL ISSUES TO FIX" section carefully. Count the issues. You will be graded on whether your patch addresses EVERY SINGLE ONE.
+3. In the `chain_of_thought` array, explicitly plan the exact lines to replace and verify how they change the logic before generating the patch.
+4. Generate the appropriate output for the '{mode}' mode based ON THE PROVIDED CODE ONLY.
+5. {mode_specific_guidance}
+- **DELETE-AND-REPLACE MANDATE (CRITICAL)**: If a line of code is identified as part of the bug, you MUST use the `-` prefix to REMOVE the entire buggy block (including its `if`, `return`, and `}}`) and the `+` prefix to ADD the correct block. Do NOT leave orphaned brackets or nested if-statements.
+- **DIFF CONTEXT IS KING**: Your diff MUST be syntactically valid unified diff format. Include 2-3 lines of unchanged context before and after your changes so the patch applies cleanly without breaking the syntax.
+- **CODE-COMMENT ALIGNMENT**: Do NOT just update the comment (e.g., changing `// Admin only` to `// Owner only`) while leaving the original code `if (role !== 'admin')` intact. The code MUST change to match the new intent.
+- **SECURITY BACKDOOR REMOVAL**: Every backdoor mentioned in the diagnosis MUST be removed with a `-` line. If it's 4 lines of code, you must output 4 `-` lines. No exceptions.
+- **ADMIN RETENTION RULE**: If a route previously required 'admin', and the bug is 'missing ownership check', you MUST allow BOTH admins AND owners. Do not lock admins out. Use logic like `if (req.user.role !== 'admin' && pet.owner.toString() !== req.user.id)` to ensure admins retain their moderation privileges while owners gain access.
+- **ISSUE CHECKLIST PROTOCOL**: Before generating the final JSON, verify your patch against the "ALL ISSUES TO FIX" list. If the list has 3 issues, your patch MUST have at least 3 distinct diff hunks (or one large hunk covering all 3).
+- **CROSS-FILE CONSISTENCY**: If the diagnosis says both the middleware and the route are broken, you MUST include diff hunks for BOTH files in your patch string. Patching only one is a failure.
+- **NO PLACEHOLDERS**: Provide the exact, complete code for the changed lines. Do not use `// ... existing code ...`.
+- **MINIMAL DIFFS**: Only change lines that are necessary to fix the bugs. Do not reformat the entire file.
+- **VALID JSON**: Your entire response MUST be a single, valid JSON object. No preamble, no postamble. Use the "reasoning" field for your explanations.
+- For EACH issue in the "ALL ISSUES TO FIX" list, write: "Issue N: [quote the issue]. Fix: [describe what code change addresses it]. File: [which file]."
+- After writing the patch, verify the checklist: "Patch covers Issue 1: YES/NO. Patch covers Issue 2: YES/NO. ..."
+- If ANY issue is marked NO, you MUST go back and add the missing fix to your patch before outputting.
+
+- **COMPREHENSIVE REPAIR RULE (CRITICAL)**: You MUST address EVERY issue listed in the 'ALL ISSUES TO FIX' section AND the 'diagnosis' string. If the diagnosis identifies multiple bugs (e.g., a security backdoor in a middleware AND a logic error in a route AND a middleware role-gate conflict), you MUST provide fixes for ALL of them. 
+- **MULTI-FILE PATCHING**: Your 'patch' field should be a Unified Diff format (`--- a/file` `+++ b/file`) that covers all files needing changes. If there are 3 issues across 2 files, you need diff hunks for BOTH files.
+- **MIDDLEWARE ROLE-GATE FIX**: If an issue mentions a middleware role-gate conflict (e.g., middleware only allows 'user' but route needs 'admin'), you MUST include a diff hunk that updates the middleware's role check to allow ALL required roles (e.g., change `decoded.role !== 'user'` to `decoded.role !== 'user' && decoded.role !== 'admin'`, or use an array-based check like `!['user', 'admin'].includes(decoded.role)`).
+- TRUST THE CODE SNIPPET, NOT ANY PREVIOUS FEEDBACK. If a previous validation says "the code already does X", you MUST verify that claim by re-reading the actual code snippet. 
+- In your chain_of_thought, you MUST copy-paste the EXACT buggy lines for EACH issue as direct quotes.
+- Your patch MUST contain the corrected versions of all identified issues. If you ignore an identified backdoor or middleware conflict, you have failed.
 
 CRITICAL: You MUST output ONLY valid JSON. NO PREAMBLE. NO introductions like "The provided code snippets indicate..." or "Here is the fix:". Start your response with '{{' and end with '}}'.
 
 Output Format (JSON ONLY):
 {{
     "chain_of_thought": [
-        "1. What exactly does the diagnosis say is wrong?",
-        "2. What is the EXACT string of code currently in the file?",
-        "3. What is the exact string of code that needs to replace it?",
-        "4. Did I change the exact operator or condition identified in the diagnosis?",
-        "5. Does the new code now match the user's expected behavior without altering unrelated fields?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
+    ]. The EXACT buggy line is: [quote from code]. Fix: [replacement line].",
+        "Checklist verification: My patch contains a diff hunk for all issues.",
+        "I am verifying that the new code matches the expected behavior."
     ],
     "contribution": {{
         "action_type": "{mode}",
         "patch": "...",
-        "deployment_checks": ["..."]
+        "deployment_checks": ["..."],
+        "reasoning": "<EXPLAIN how your patch addresses EVERY issue mentioned in the checklist above>"
     }},
     "lokr_requests": []
 }}
@@ -315,10 +389,9 @@ Tasks:
 Output Format (JSON ONLY):
 {{
     "chain_of_thought": [
-        "1. Is this assessment grounded in verified data?",
-        "2. What is the overall deployment risk?",
-        "3. How long would a rollback take?",
-        "4. What health checks are needed?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
         "deployment_risk": "low",
@@ -346,10 +419,9 @@ Tasks:
 Output Format (JSON ONLY):
 {{
     "chain_of_thought": [
-        "1. Could this diff introduce vulnerabilities or logic regressions?",
-        "2. Did the Analyzer report that a validation condition was weakened? If so, I must not approve.",
-        "3. Will this degrade performance?",
-        "4. Should this be approved?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
         "security_issues": ["list of issues"],
@@ -366,9 +438,9 @@ Your role is the **Safety Agent**. Your goal is to evaluate the risk and safety 
 
 Inputs:
 You will receive the full investigation state as a JSON object. This includes:
-- The original task and code snippet.
-- The latest proposed action (patch/comments) from the Action Agent.
-- All past hypotheses and evidence.
+- The proposed action (patch/comments) from the Action Agent.
+- The ORIGINAL CODE CONTEXT showing the actual source files.
+- The DIAGNOSED ISSUES list showing all bugs the Analyzer found.
 - The current operating mode ('{mode}').
 
 LOKR REQUESTS:
@@ -380,21 +452,35 @@ Tasks:
 3. Assign a risk score and provide warnings if necessary.
 
 CRITICAL SAFETY CALIBRATION:
-- Bug fixes that correct parameter names (e.g., req.params.userId to req.params.ownerId), operator inversions (e.g., && to ||, === to !==), or wrong variable references are INHERENTLY LOW RISK (risk_score < 0.3). These are the exact bugs the pipeline was designed to fix.
-- Only flag as unsafe (risk_score > 0.7) if the patch introduces a GENUINE security risk: authentication bypass, data exposure, SQL/NoSQL injection, or removes existing security checks.
-- Do NOT flag a patch as unsafe simply because it changes code. Changing code is the entire point of a repair pipeline.
+- **ADVERSARIAL SECURITY AUDIT (CRITICAL)**: You must look for "Shadow Bypasses" (e.g., headers that grant admin rights) and "Backdoors." If you see code like `if (req.headers['x-debug'])` granting access, you MUST flag it as unsafe if the patch doesn't remove it.
+- **BREAKING CHANGE GUARD**: Analyze the impact on all user roles. If the patch fixes a bug for an 'admin' but simultaneously locks out 'regular users' from their standard features, mark `safe=false` and explain the breaking change.
+- **LOGIC DEADLOCK GUARD (CRITICAL)**: You MUST trace the FULL request lifecycle through middleware → route for EACH user role:
+  1. Read the ORIGINAL CODE CONTEXT to find the middleware's role check (e.g., `if (decoded.role !== 'user')`).
+  2. Read the patch to see what roles the route logic requires (e.g., `req.user.role !== 'admin'`).
+  3. Simulate: Can an 'admin' user pass through the middleware AND reach the route logic? Can a 'user'? 
+  4. If ANY role that the route explicitly handles is BLOCKED by the middleware (whether patched or unpatched), mark `safe=false` with a warning: "LOGIC DEADLOCK: [role] is blocked by middleware but required by route."
+  5. IMPORTANT: Check the DIAGNOSED ISSUES list. If an issue mentions a middleware role-gate conflict and the patch does NOT include a fix for it, mark `safe=false` with warning: "INCOMPLETE PATCH: Diagnosed middleware role-gate conflict not addressed in patch."
+- **INCOMPLETE PATCH DETECTION**: Compare the DIAGNOSED ISSUES list against the patch. If the patch only addresses some issues but not all, mark `safe=false` and list the missing fixes.
+- Bug fixes that correct parameter names (e.g., req.params.userId to req.params.ownerId), operator inversions (e.g., && to ||, === to !==), or wrong variable references are INHERENTLY LOW RISK (risk_score < 0.3).
+- **MIDDLEWARE RESOLUTION TOLERANCE**: If Lokr was unable to resolve a specific middleware file (e.g., if get_file_summary failed), do NOT reject the patch solely for being "incomplete" regarding that file. Evaluate the patch based on the code that IS available. Note the limitation in your reasoning but proceed with the assessment.
+- Only flag as unsafe (risk_score > 0.7) if the patch introduces a GENUINE security risk, a catastrophic breaking change, OR is incomplete (missing diagnosed issues).
 - If the patch is empty or blank, mark safe=false with risk_score=1.0 because an empty patch is a pipeline failure.
+
+CRITICAL: You MUST output ONLY valid JSON. NEVER include introductions, preamble, or conclusions. If you need to explain your reasoning, use the "reasoning" field INSIDE the JSON. Failure to output valid JSON will break the system.
 
 Output Format (JSON ONLY):
 {{
     "chain_of_thought": [
-        "1. Analyze the proposed patch for security vulnerabilities.",
-        "2. Analyze for breaking changes or operational risks."
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
         "safe": true,
         "risk_score": 0.0,
-        "warnings": ["list", "of", "warning", "strings"]
+        "warnings": ["list", "of", "warning", "strings"],
+        "reasoning": "<EXPLAIN your verdict here. Be specific about why the patch is safe or unsafe. Trace the roles through the middleware logic.>",
+        "revision_suggestions": ["If safe=false, provide specific code changes to fix the issues, e.g. 'Add ownership check: if (pet.ownerId !== req.user.id) return res.status(403)'"]
     }},
     "lokr_requests": []
 }}
@@ -421,10 +507,9 @@ Tasks:
 Output Format (JSON ONLY):
 {{
     "chain_of_thought": [
-        "1. Did the Safety agent give a safe verdict despite unverified data? If so, this is a failure.",
-        "2. What needs to happen before deploy?",
-        "3. What needs to happen after deploy?",
-        "4. How to rollback?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
         "pre_deploy_checklist": ["checklist items"],
@@ -452,9 +537,9 @@ Tasks:
 Output Format (JSON ONLY):
 {{
     "chain_of_thought": [
-        "1. Did the Safety agent approve a weakened condition reported by the Analyzer? If so, this is a failure.",
-        "2. What needs to be checked before merging?",
-        "3. How can the developer verify this works?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
         "review_checklist": ["checklist item 1", "checklist item 2"],
@@ -474,25 +559,43 @@ You will receive the full investigation state as a JSON object. This includes:
 - The evaluation from the Safety Agent.
 - All prior hypotheses and evidence.
 
-LOKR REQUESTS:
-If you need more context to validate the patch, you can query the codebase by adding a query string to the "lokr_requests" array.
+LOKR REQUESTS (GRAPH-RAG CHEAT SHEET):
+You have access to 'Lokr', a Graph-RAG codebase intelligence engine. You MUST use it to cross-check the proposed patch against the rest of the codebase to prevent regressions.
+Add specific query strings to the "lokr_requests" array:
+1. "get dependencies of <functionName>" (To see if changing this function breaks its callers).
+2. "file summary of <filePath>" (To see if the patch contradicts other logic in the same file or related files).
+
+STRICT GRAPH-WALKING RULES:
+- If the patch modifies a middleware, you MUST query "get dependencies of <middlewareName>" or request the file summary of the routes that use it, to ensure the patch doesn't create a Logic Deadlock for other routes.
+- If the user's original bug explicitly mentions multiple files (e.g., "middleware and route"), and the patch only touches one, you MUST use Lokr to fetch the other file and verify the logic isn't broken there.
 
 Tasks:
 1. In the `chain_of_thought` array, explicitly TRACE the behavior before and after the patch. 
    - Trace the buggy code path with the reported scenario.
    - Trace the patched code path with the same scenario.
-   - Confirm the patch changes the actual flow (e.g., "Before patch: returns early incorrectly. After patch: returns early only when status matches").
-2. MANDATORY EXACT QUOTING: You MUST copy-paste the EXACT original line from the code snippet AND the EXACT patched line. Do NOT claim "the code already uses X" without quoting the actual line. If the code snippet says `const ownerId = req.params.userId;` then THAT is what the code says — not `req.params.ownerId`.
-3. Verify that the proposed patch actually addresses the specific bug reported by the user.
-4. Verify that the proposed patch uses the same programming language and file structure as the
-   original code. If the patch references functions, variables, or syntax that don't exist in
-   the original file, return status: failure with a clear explanation that the patch is hallucinated.
-5. If the patch is EMPTY or blank, return status: failure immediately.
-
-CRITICAL VALIDATION CALIBRATION:
-- Bug fixes that correct parameter names (e.g., req.params.userId to req.params.ownerId), operator inversions (e.g., && to ||), or wrong variable references are VALID and DESIRED fixes. Do NOT reject them by claiming they "do not change logic" or "only shuffle variables". If the diagnosis says a parameter is wrong, and the patch fixes that parameter, then the patch is SUCCESSFUL.
-6. Check that the safety evaluation has cleared the action for deployment.
-7. Provide a final status and feedback for the user.
+   - **Trace the patched code path for DIFFERENT user roles to ensure no breaking changes occur.**
+2. **LOGICAL REACHABILITY AUDIT (CRITICAL)**: You must verify that the path to the "final action" (e.g., `findByIdAndDelete`, `save`, `update`) is actually REACHABLE for the intended users. 
+   - Trace a "Regular User who owns the resource": Can they pass the middleware? Can they pass EVERY `if` check in the route? 
+   - Trace an "Admin": Can they pass?
+   - **QUOTE THE CODE MANDATE**: You MUST physically copy and quote the exact line of code from the `+` lines in the patch that PROVES an admin can access the route, and the exact line that PROVES an owner can access the route. If you cannot quote the exact code, you are hallucinating. Mark status: failure.
+   - **HALLUCINATION ALERT**: If a route contains `if (pet.owner !== req.user.id) return 403`, an admin CANNOT pass it (unless they own every pet). If you claim an admin can pass this, you are hallucinating. If the patch locks admins out, mark status: failure.
+3. **DIFF SYNTAX VERIFICATION (CRITICAL)**: Analyze the generated patch blocks (`-` and `+` lines). Did the Action Agent create an empty or malformed patch? If there are no `-` or `+` lines for a mentioned file, or if it replaced an `if` line but left the old `return` and `}}` lines intact creating a syntax error, mark status: failure.
+4. **COMMENT VS CODE VERIFICATION**: Check if the Action Agent only updated a COMMENT but left the BUGGY CODE intact.
+5. **MIDDLEWARE ROLE-GATE SIMULATION (CRITICAL)**: You MUST perform this simulation for EVERY user role by quoting the ACTUAL patch code, NOT the Action Agent's reasoning:
+   - User Role: Admin | Middleware Code: [Quote `+` line] | Route Logic: [Quote `+` line] | Result: [Reach/Blocked]
+   - User Role: Regular User | Middleware Code: [Quote `+` line] | Route Logic: [Quote `+` line] | Result: [Reach/Blocked]
+   - If the patch doesn't actually contain `+` lines fixing the middleware role check (e.g., it still says `decoded.role !== 'user'`), then Admin is BLOCKED. Mark status: failure.
+6. **SECURITY BACKDOOR CHECK (ANTI-HALLUCINATION)**: You MUST look at the raw patch string. Do not trust the Action Agent's reasoning. If the diagnosis mentions a backdoor (like `x-sentinel-debug`), you MUST verify there is a `-` block in the patch that explicitly removes it. If the `-` block is missing, the backdoor is still there. Mark status: failure.
+7. **COMPREHENSIVE FIX VERIFICATION (CRITICAL)**: Count the number of issues in the diagnosis. Count the number of distinct fixes in the ACTUAL patch string. They MUST match.
+   - For EACH issue in the diagnosis 'issues' array, find the corresponding diff hunk in the patch.
+   - If ANY issue has no corresponding fix in the patch, you MUST mark status: failure.
+   - Example failure feedback: "INCOMPLETE PATCH: The diagnosis identified [N] issues but the patch only addresses [M]. Missing fix for: [quote the unfixed issue]. The Action Agent MUST provide fixes for ALL diagnosed issues."
+8. Verify that the proposed patch uses the same programming language and file structure.
+9. Verify that the proposed patch uses the same programming language and file structure.
+10. If the patch is EMPTY or blank, return status: failure immediately.
+11. LOKR VERIFICATION RULE: If the original prompt mentions multiple files (e.g., "middleware and route") and you only see a patch for one, you MUST add the missing file to "lokr_requests" AND you MUST set your "status" to "failure" with the feedback: "Incomplete fix. Requested missing file from Lokr." You cannot succeed a patch if you haven't seen all the files mentioned.
+12. Check that the safety evaluation has cleared the action for deployment.
+13. Provide a final status and feedback for the user.
 
 TASK ANCHOR (CRITICAL):
 - Your ONLY job is to validate whether the Action Agent's proposed patch fixes the ORIGINAL bug described in the 'task' field.
@@ -505,9 +608,9 @@ CRITICAL: You MUST output ONLY valid JSON. NO PREAMBLE. NO essays. Start your re
 Output Format (JSON ONLY):
 {{
     "chain_of_thought": [
-        "1. Did the patch actually change the core logic operator identified in the diagnosis?",
-        "2. Does the patch exactly match the syntax and variables of the original code?",
-        "3. Does the patch fix the issue, or did it just shuffle variables around?"
+        "<Step 1 of your reasoning>",
+        "<Step 2 of your reasoning>",
+        "<Step 3 of your reasoning>"
     ],
     "contribution": {{
         "status": "success",

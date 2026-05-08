@@ -1,0 +1,701 @@
+[
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/routes/admin.js::PUT::/settings/profile",
+    "node_type": "function",
+    "usage_count": 30,
+    "name": "PUT::/settings/profile",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "req",
+      "res"
+    ],
+    "signature": "PUT::/settings/profile(req, res)",
+    "docstring": null,
+    "lineno": 281,
+    "end_lineno": 328,
+    "calls": [
+      "select",
+      "status",
+      "keys",
+      "values",
+      "isNaN",
+      "error",
+      "join",
+      "map",
+      "findByIdAndUpdate",
+      "Number",
+      "json"
+    ],
+    "uses": [
+      "messages",
+      "res",
+      "updatedUser",
+      "username",
+      "User",
+      "req",
+      "isNaN",
+      "updateData",
+      "userId",
+      "numericAge",
+      "Object",
+      "error",
+      "Number",
+      "console",
+      "e",
+      "age"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/frontend/src/admin/AdminUserManagement.js::fetchUsers",
+    "node_type": "function",
+    "usage_count": 2,
+    "name": "fetchUsers",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [],
+    "signature": "fetchUsers()",
+    "docstring": null,
+    "lineno": 21,
+    "end_lineno": 28,
+    "calls": [
+      "setUsers",
+      "get",
+      "setError"
+    ],
+    "uses": [
+      "response",
+      "setUsers",
+      "setError",
+      "err",
+      "api"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/routes/admin.js::GET::/users",
+    "node_type": "function",
+    "usage_count": 38,
+    "name": "GET::/users",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "req",
+      "res"
+    ],
+    "signature": "GET::/users(req, res)",
+    "docstring": null,
+    "lineno": 74,
+    "end_lineno": 82,
+    "calls": [
+      "select",
+      "status",
+      "error",
+      "json",
+      "find"
+    ],
+    "uses": [
+      "res",
+      "User",
+      "error",
+      "users",
+      "console"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/frontend/src/admin/AdminUserManagement.js::AdminUserManagement",
+    "node_type": "function",
+    "usage_count": 3,
+    "name": "AdminUserManagement",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [],
+    "signature": "AdminUserManagement()",
+    "docstring": null,
+    "lineno": 9,
+    "end_lineno": 173,
+    "calls": [
+      "get",
+      "setShowModal",
+      "handleSetStatus",
+      "useEffect",
+      "setUsers",
+      "setUserToDelete",
+      "filter",
+      "useState",
+      "clsx",
+      "handleShowModal",
+      "setError",
+      "map",
+      "handleCloseModal",
+      "toLocaleDateString",
+      "fetchUsers",
+      "delete",
+      "put"
+    ],
+    "uses": [
+      "userToDelete",
+      "setUsers",
+      "setUserToDelete",
+      "p",
+      "thead",
+      "clsx",
+      "userId",
+      "AnimatePresence",
+      "fetchUsers",
+      "Users",
+      "PowerOff",
+      "td",
+      "Shield",
+      "setShowModal",
+      "user",
+      "handleSetStatus",
+      "response",
+      "handleDeleteUser",
+      "table",
+      "document",
+      "tr",
+      "desiredStatus",
+      "ShieldAlert",
+      "th",
+      "motion",
+      "span",
+      "button",
+      "useEffect",
+      "useState",
+      "Power",
+      "error",
+      "setError",
+      "err",
+      "Date",
+      "h1",
+      "Trash2",
+      "h2",
+      "api",
+      "div",
+      "users",
+      "showModal",
+      "AlertCircle",
+      "handleCloseModal",
+      "tbody",
+      "handleShowModal"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/models/User.js::VAR::User",
+    "node_type": "variable",
+    "name": "User",
+    "source_code": "const User = mongoose.model('User', userSchema, 'users');",
+    "lineno": 88,
+    "end_lineno": 88
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/routes/admin.js::GET::/dashboard",
+    "node_type": "function",
+    "usage_count": 0,
+    "name": "GET::/dashboard",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "req",
+      "res"
+    ],
+    "signature": "GET::/dashboard(req, res)",
+    "docstring": null,
+    "lineno": 46,
+    "end_lineno": 70,
+    "calls": [
+      "status",
+      "sort",
+      "json",
+      "limit",
+      "error",
+      "countDocuments",
+      "populate",
+      "find"
+    ],
+    "uses": [
+      "totalUsers",
+      "res",
+      "Pet",
+      "totalPets",
+      "User",
+      "recentActivity",
+      "error",
+      "RecentActivity",
+      "activeUsers",
+      "console"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/models/User.js::VAR::mongoose",
+    "node_type": "variable",
+    "name": "mongoose",
+    "source_code": "const mongoose = require('mongoose');",
+    "lineno": 1,
+    "end_lineno": 1
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/routes/admin.js::GET::/user",
+    "node_type": "function",
+    "usage_count": 36,
+    "name": "GET::/user",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "req",
+      "res"
+    ],
+    "signature": "GET::/user(req, res)",
+    "docstring": null,
+    "lineno": 29,
+    "end_lineno": 42,
+    "calls": [
+      "select",
+      "status",
+      "error",
+      "findById",
+      "json"
+    ],
+    "uses": [
+      "res",
+      "user",
+      "User",
+      "req",
+      "error",
+      "console"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/frontend/src/admin/AdminSettings.js::fetchUserData",
+    "node_type": "function",
+    "usage_count": 0,
+    "name": "fetchUserData",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [],
+    "signature": "fetchUserData()",
+    "docstring": null,
+    "lineno": 23,
+    "end_lineno": 33,
+    "calls": [
+      "setName",
+      "get",
+      "setTimeout",
+      "setAge",
+      "error",
+      "setError"
+    ],
+    "uses": [
+      "setName",
+      "setTimeout",
+      "response",
+      "setAge",
+      "setError",
+      "err",
+      "api",
+      "console"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/models/User.js",
+    "node_type": "file",
+    "import_map": {
+      "mongoose": "mongoose",
+      "bcrypt": "bcrypt"
+    }
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/frontend/src/admin/AdminSettings.js::handleProfileChange",
+    "node_type": "function",
+    "usage_count": 2,
+    "name": "handleProfileChange",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "e"
+    ],
+    "signature": "handleProfileChange(e)",
+    "docstring": null,
+    "lineno": 72,
+    "end_lineno": 95,
+    "calls": [
+      "setTimeout",
+      "setSuccess",
+      "error",
+      "setError",
+      "preventDefault",
+      "put"
+    ],
+    "uses": [
+      "setTimeout",
+      "setSuccess",
+      "setError",
+      "err",
+      "name",
+      "api",
+      "console",
+      "e",
+      "age"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/models/User.js::userSchema.pre(save)",
+    "node_type": "function",
+    "usage_count": 0,
+    "name": "userSchema.pre(save)",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "next"
+    ],
+    "signature": "userSchema.pre(save)(next)",
+    "docstring": null,
+    "lineno": 67,
+    "end_lineno": 84,
+    "calls": [
+      "genSalt",
+      "isModified",
+      "hash",
+      "next"
+    ],
+    "uses": [
+      "bcrypt",
+      "salt",
+      "error",
+      "next"
+    ],
+    "parent_schema_name": "userSchema"
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/routes/admin.js::PUT::/settings/password",
+    "node_type": "function",
+    "usage_count": 12,
+    "name": "PUT::/settings/password",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "req",
+      "res"
+    ],
+    "signature": "PUT::/settings/password(req, res)",
+    "docstring": null,
+    "lineno": 240,
+    "end_lineno": 277,
+    "calls": [
+      "status",
+      "compare",
+      "values",
+      "error",
+      "map",
+      "save",
+      "join",
+      "findById",
+      "json"
+    ],
+    "uses": [
+      "messages",
+      "res",
+      "user",
+      "User",
+      "bcrypt",
+      "req",
+      "userId",
+      "error",
+      "Object",
+      "newPassword",
+      "isMatch",
+      "currentPassword",
+      "console",
+      "e"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/frontend/src/admin/AdminUserManagement.js::handleDeleteUser",
+    "node_type": "function",
+    "usage_count": 36,
+    "name": "handleDeleteUser",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [],
+    "signature": "handleDeleteUser()",
+    "docstring": null,
+    "lineno": 42,
+    "end_lineno": 50,
+    "calls": [
+      "setUsers",
+      "filter",
+      "setError",
+      "handleCloseModal",
+      "delete"
+    ],
+    "uses": [
+      "userToDelete",
+      "user",
+      "setUsers",
+      "setError",
+      "users",
+      "err",
+      "api",
+      "handleCloseModal"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/routes/admin.js::VAR::User",
+    "node_type": "variable",
+    "name": "User",
+    "source_code": "const User = require('../models/User');",
+    "lineno": 3,
+    "end_lineno": 3,
+    "usage_count": 39
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/models/User.js::VAR::userSchema",
+    "node_type": "variable",
+    "name": "userSchema",
+    "source_code": "const userSchema = new mongoose.Schema({\n    // User's email address. Must be unique and in a valid format.\n    email: {\n        type: String,\n        required: [true, 'Email is required'], // Custom message for required validation.\n        unique: true, // Ensures email addresses are unique across all users.\n        trim: true,     // Automatically removes leading/trailing whitespace.\n        lowercase: true, // Converts email to lowercase before saving.\n        // Regex to validate the email format.\n        match: [/^\\w+([\\.-]?\\w+)*@\\w+([\\.-]?\\w+)*(\\.\\w{2,3})+$/, 'Please enter a valid email'],\n    },\n    // User's password. Stored as a hash.\n    password: {\n        type: String,\n        required: [true, 'Password is required'], // Custom message for required validation.\n        // Custom validator for password complexity.\n        validate: {\n            validator: function (v) {\n                // Only validate complexity if the password is new or has been modified.\n                // This prevents re-validation on every save if the password hasn't changed.\n                if (!this.isModified('password')) return true;\n\n                // Password must be at least 8 characters long,\n                // include uppercase, lowercase, number, and a special character.\n                return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#+\\-.]).{8,}$/.test(v);\n            },\n            // Custom message for password complexity validation failure.\n            message: props => `Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character (@$!%*?&#+-. etc).`\n        },\n    },\n    // User's chosen username.\n    username: {\n        type: String,\n        required: [true, 'Username is required'], // Custom message for required validation.\n        trim: true, // Automatically removes leading/trailing whitespace.\n    },\n    // User's age. Must be between 13 and 120.\n    age: {\n        type: Number,\n        required: [true, 'Age is required'], // Custom message for required validation.\n        min: [13, 'Age must be at least 13'], // Minimum age validation with custom message.\n        max: [120, 'Age must be less than 120'], // Maximum age validation with custom message.\n    },\n    // User's role, restricted to 'user' or 'admin'.\n    role: {\n        type: String,\n        enum: ['user', 'admin'], // Allowed values for role.\n        default: 'user',         // Defaults to 'user' if not specified.\n    },\n    // Flag indicating if the user account is active.\n    isActive: {\n        type: Boolean,\n        default: true, // Defaults to true (active) if not specified.\n    },\n\n}, {\n    // Mongoose options:\n    timestamps: true // Automatically adds `createdAt` and `updatedAt` fields to documents.\n});",
+    "lineno": 5,
+    "end_lineno": 63
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/routes/admin.js::PUT::/users/:id",
+    "node_type": "function",
+    "usage_count": 36,
+    "name": "PUT::/users/:id",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "req",
+      "res"
+    ],
+    "signature": "PUT::/users/:id(req, res)",
+    "docstring": null,
+    "lineno": 126,
+    "end_lineno": 192,
+    "calls": [
+      "status",
+      "error",
+      "toObject",
+      "save",
+      "findById",
+      "json"
+    ],
+    "uses": [
+      "finalStatus",
+      "requestedStatus",
+      "res",
+      "userFound",
+      "User",
+      "req",
+      "initialStatus",
+      "userId",
+      "savedUser",
+      "error",
+      "saveError",
+      "userToUpdate",
+      "console",
+      "userResponse"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/frontend/src/admin/AdminSettings.js::AdminSettings",
+    "node_type": "function",
+    "usage_count": 0,
+    "name": "AdminSettings",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [],
+    "signature": "AdminSettings()",
+    "docstring": null,
+    "lineno": 8,
+    "end_lineno": 176,
+    "calls": [
+      "setName",
+      "get",
+      "setTimeout",
+      "setConfirmNewPassword",
+      "fetchUserData",
+      "useEffect",
+      "setCurrentPassword",
+      "setAge",
+      "setSuccess",
+      "useState",
+      "error",
+      "setError",
+      "test",
+      "preventDefault",
+      "setNewPassword",
+      "put"
+    ],
+    "uses": [
+      "setTimeout",
+      "p",
+      "setAge",
+      "setSuccess",
+      "label",
+      "input",
+      "name",
+      "setNewPassword",
+      "console",
+      "e",
+      "form",
+      "setCurrentPassword",
+      "response",
+      "confirmNewPassword",
+      "inputClass",
+      "newPassword",
+      "document",
+      "labelClass",
+      "age",
+      "motion",
+      "fetchUserData",
+      "useEffect",
+      "Lock",
+      "useState",
+      "handlePasswordChange",
+      "error",
+      "setError",
+      "err",
+      "handleProfileChange",
+      "h1",
+      "h2",
+      "api",
+      "Settings",
+      "currentPassword",
+      "passwordRegex",
+      "setName",
+      "setConfirmNewPassword",
+      "success",
+      "div",
+      "User",
+      "AlertCircle",
+      "CheckCircle2"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/routes/admin.js::DELETE::/users/:id",
+    "node_type": "function",
+    "usage_count": 76,
+    "name": "DELETE::/users/:id",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "req",
+      "res"
+    ],
+    "signature": "DELETE::/users/:id(req, res)",
+    "docstring": null,
+    "lineno": 86,
+    "end_lineno": 122,
+    "calls": [
+      "logActivity",
+      "status",
+      "findByIdAndDelete",
+      "error",
+      "deleteMany",
+      "findById",
+      "json",
+      "find"
+    ],
+    "uses": [
+      "logActivity",
+      "userIdToDelete",
+      "Schedule",
+      "res",
+      "user",
+      "pets",
+      "Pet",
+      "User",
+      "req",
+      "userEmail",
+      "pet",
+      "error",
+      "adminUserId",
+      "console"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/frontend/src/admin/AdminUserManagement.js::handleShowModal",
+    "node_type": "function",
+    "usage_count": 2,
+    "name": "handleShowModal",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "userId"
+    ],
+    "signature": "handleShowModal(userId)",
+    "docstring": null,
+    "lineno": 32,
+    "end_lineno": 35,
+    "calls": [
+      "setUserToDelete",
+      "setShowModal"
+    ],
+    "uses": [
+      "setUserToDelete",
+      "setShowModal",
+      "userId"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/frontend/src/admin/AdminUserManagement.js::handleSetStatus",
+    "node_type": "function",
+    "usage_count": 2,
+    "name": "handleSetStatus",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [
+      "userId",
+      "desiredStatus"
+    ],
+    "signature": "handleSetStatus(userId, desiredStatus)",
+    "docstring": null,
+    "lineno": 52,
+    "end_lineno": 61,
+    "calls": [
+      "map",
+      "setUsers",
+      "setError",
+      "put"
+    ],
+    "uses": [
+      "user",
+      "setUsers",
+      "userId",
+      "setError",
+      "users",
+      "err",
+      "api",
+      "desiredStatus"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/backend/models/User.js::VAR::bcrypt",
+    "node_type": "variable",
+    "name": "bcrypt",
+    "source_code": "const bcrypt = require('bcrypt');",
+    "lineno": 2,
+    "end_lineno": 2
+  },
+  {
+    "node_id": "/home/anas/Desktop/FILES NEEDED/pet-ai-render/frontend/src/admin/AdminUserManagement.js::handleCloseModal",
+    "node_type": "function",
+    "usage_count": 18,
+    "name": "handleCloseModal",
+    "parent_class": null,
+    "is_method": false,
+    "parameters": [],
+    "signature": "handleCloseModal()",
+    "docstring": null,
+    "lineno": 37,
+    "end_lineno": 40,
+    "calls": [
+      "setUserToDelete",
+      "setShowModal"
+    ],
+    "uses": [
+      "setUserToDelete",
+      "setShowModal"
+    ]
+  }
+]

@@ -15,38 +15,46 @@ class LokrService:
     All returned data preserves full graph node IDs and metadata for iterative reasoning.
     """
 
-    def __init__(self, project_path: str, lokr_path: Optional[str] = None):
+    def __init__(self, project_path: str, lokr_path: Optional[str] = None, llm_config: Optional[Dict[str, str]] = None):
         # Resolve Lokr path
         if lokr_path is None:
             lokr_path = os.environ.get("LOKR_PATH", "../Lokr")
         self.lokr_path = os.path.abspath(lokr_path)
         self.project_path = os.path.abspath(project_path)
+        self.llm_config = llm_config or {}
+
+        # Set environment variables so the Lokr engine can pick them up
+        if self.llm_config:
+            os.environ["OPENAI_API_BASE"] = self.llm_config.get("base_url", "")
+            os.environ["OPENAI_API_KEY"] = self.llm_config.get("api_key", "")
+            os.environ["DEFAULT_MODEL"] = self.llm_config.get("model", "")
+            print(f"[LOKR SERVICE] Synced LLM Config: {self.llm_config.get('base_url')} | Model: {self.llm_config.get('model')}")
 
         # Ensure Lokr is importable
-        if self.lokr_path not in sys.path:
-            sys.path.insert(0, self.lokr_path)
-
         self.initialized = False
         self.oracle = None
         self.parser = None
         self.graph = None
         self.vector_db = None
 
+        # Add Lokr path to sys.path to resolve internal modules
+        if self.lokr_path not in sys.path:
+            sys.path.insert(0, self.lokr_path)
+
         try:
             from engine.oracle import ContextOracle
             from core.parser import CodeParser
             from core.graph import DependencyGraph
             from data.vector_db import CodebaseVectorDB
-        except ImportError as e:
-            print(f"Error importing from Lokr: {e}")
-            print(f"Ensure the Lokr project is available at: {self.lokr_path}")
-            return
-
-        # Initialize Parser
-        try:
+            
+            # Initialize Components
             self.parser = CodeParser()
+        except ImportError as e:
+            print(f"[LOKR SERVICE][ERROR] Failed to import core modules: {e}")
+            print(f"Check if engine/ core/ and data/ exist in: {self.lokr_path}")
+            return
         except Exception as e:
-            print(f"Failed to initialize CodeParser: {e}")
+            print(f"[LOKR SERVICE][ERROR] Initialization failed: {e}")
             return
 
         # Load dependency graph
@@ -117,8 +125,10 @@ class LokrService:
         if not self.initialized:
             return {"error": "LokrService not initialized"}
         resolved = file_path
-        if not os.path.isabs(file_path):
-            resolved = os.path.join(self.project_path, file_path)
+        if not os.path.exists(resolved):
+            # Try resolving relative to project_path if it doesn't exist as absolute
+            resolved = os.path.join(self.project_path, file_path.lstrip("/"))
+        
         if not os.path.exists(resolved):
             return {"error": "File not found", "file_path": resolved}
         try:
@@ -203,13 +213,29 @@ class LokrService:
         counts["function"] += counts.pop("method", 0)
         return counts
 
-    def resolve_request(self, request: str) -> dict:
+    def resolve_request(self, request: Any) -> dict:
         """
-        Interprets a natural-language request (e.g., "get dependencies of tokenRefresh")
-        and calls the appropriate existing method using simple keyword matching.
+        Interprets a natural-language request string or a structured dictionary
+        and calls the appropriate existing method.
         """
-        req_lower = request.lower()
-        words = request.split()
+        if isinstance(request, dict):
+            # If LLM provides a structured dict, extract the type and target
+            req_type = request.get("request_type", "").lower()
+            file_path = request.get("file_path", "")
+            func_name = request.get("function_name", request.get("function", ""))
+            
+            if "dependency" in req_type or "caller" in req_type:
+                if func_name: return self.get_function_dependencies(func_name)
+            if "file" in req_type or "summary" in req_type:
+                if file_path: return self.get_file_summary(file_path)
+            
+            # Fallback: convert dict to string and use NLP matching
+            request_str = str(request)
+        else:
+            request_str = str(request)
+
+        req_lower = request_str.lower()
+        words = request_str.split()
         
         # 1. Dependency request
         if "dependenc" in req_lower or "caller" in req_lower or "callee" in req_lower:
@@ -218,7 +244,7 @@ class LokrService:
                 try:
                     idx = req_lower.split().index("of")
                     func_name = words[idx + 1].strip("'\"")
-                except ValueError:
+                except (ValueError, IndexError):
                     pass
             if not func_name:
                 func_name = words[-1].strip("'\"")
@@ -237,7 +263,7 @@ class LokrService:
                 try:
                     idx = req_lower.split().index("of")
                     file_path = words[idx + 1].strip("'\"")
-                except ValueError:
+                except (ValueError, IndexError):
                     pass
             if not file_path:
                 file_path = words[-1].strip("'\"")
@@ -246,5 +272,5 @@ class LokrService:
                 return self.get_file_summary(file_path)
                 
         # 3. Fallback to generic semantic search
-        results = self.search_code(request)
-        return {"query": request, "search_results": results}
+        results = self.search_code(request_str)
+        return {"query": request_str, "search_results": results}
