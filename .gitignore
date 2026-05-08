@@ -143,3 +143,5 @@ Thumbs.db
 # Lokr specific 
 scratch/
 brain/
+!demo_project/.lokr/**
+!demo_project/data/**
