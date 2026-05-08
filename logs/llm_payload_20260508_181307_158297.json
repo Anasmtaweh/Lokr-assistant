@@ -1,0 +1,26 @@
+{
+  "timestamp": "20260508_181307_158297",
+  "model": "qwen2.5-coder:7b",
+  "api_type": "ollama",
+  "token_estimate": 247,
+  "truncation_warning": false,
+  "system_chars": 476,
+  "user_chars": 515,
+  "payload": {
+    "model": "qwen2.5-coder:7b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a bug-triage agent. Given a bug report and a list of candidate functions, decide which functions you need to inspect to find the bug. If the bug involves data not saving correctly, explicitly select BOTH the frontend API call function AND the backend route/controller function to verify the data flow. Output ONLY a JSON object with the key `selected_functions`, which is an array of objects like {\"file\": \"...\", \"function_name\": \"...\"}. Do not include any other text."
+      },
+      {
+        "role": "user",
+        "content": "USER BUG REPORT:\nWhy can admins not delete pets?\u201d\n\nCANDIDATE FUNCTIONS:\n- File: /home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js\n  Name: deleteById\n  Signature: deleteById(petId)\n  Lines: 8-14\n\n- File: /home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js\n  Name: removePet\n  Signature: removePet(petId, userId)\n  Lines: 5-11\n\n- File: /home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js\n  Name: deletePet\n  Signature: deletePet(req, res)\n  Lines: 5-18\n\n"
+      }
+    ],
+    "stream": false,
+    "options": {
+      "temperature": 0.1
+    }
+  }
+}

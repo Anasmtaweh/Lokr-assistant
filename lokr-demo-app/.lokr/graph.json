@@ -1,0 +1,605 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {
+    "commit_hash": "71d9f88d1efa6bd69c6ae77507af5c3cdb24f30f"
+  },
+  "nodes": [
+    {
+      "node_type": "file",
+      "import_map": {
+        "express": "express",
+        "adminRoutes": "./routes/admin.routes",
+        "petRoutes": "./routes/pet.routes",
+        "{ authenticate }": "./middleware/auth"
+      },
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js"
+    },
+    {
+      "node_type": "file",
+      "import_map": {},
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js"
+    },
+    {
+      "node_type": "file",
+      "import_map": {
+        "{ requireRole }": "../middleware/role"
+      },
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js"
+    },
+    {
+      "node_type": "file",
+      "import_map": {
+        "petController": "../controllers/pet.controller"
+      },
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/pet.routes.js"
+    },
+    {
+      "node_type": "file",
+      "import_map": {
+        "jwt": "jsonwebtoken"
+      },
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js"
+    },
+    {
+      "node_type": "file",
+      "import_map": {},
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/role.js"
+    },
+    {
+      "node_type": "file",
+      "import_map": {
+        "petService": "../services/pet.service"
+      },
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js"
+    },
+    {
+      "node_type": "file",
+      "import_map": {
+        "petRepository": "../repositories/pet.repository"
+      },
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js"
+    },
+    {
+      "node_type": "file",
+      "import_map": {},
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/utils/geometry-calculator.js"
+    },
+    {
+      "node_type": "variable",
+      "name": "express",
+      "source_code": "const express = require('express');",
+      "lineno": 1,
+      "end_lineno": 1,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js::VAR::express"
+    },
+    {
+      "node_type": "variable",
+      "name": "adminRoutes",
+      "source_code": "const adminRoutes = require('./routes/admin.routes');",
+      "lineno": 2,
+      "end_lineno": 2,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js::VAR::adminRoutes"
+    },
+    {
+      "node_type": "variable",
+      "name": "petRoutes",
+      "source_code": "const petRoutes = require('./routes/pet.routes');",
+      "lineno": 3,
+      "end_lineno": 3,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js::VAR::petRoutes"
+    },
+    {
+      "node_type": "variable",
+      "name": "app",
+      "source_code": "const app = express();",
+      "lineno": 6,
+      "end_lineno": 6,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js::VAR::app"
+    },
+    {
+      "node_type": "variable",
+      "name": "PORT",
+      "source_code": "const PORT = 3000;",
+      "lineno": 19,
+      "end_lineno": 19,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js::VAR::PORT"
+    },
+    {
+      "node_type": "class",
+      "name": "PetRepository",
+      "docstring": null,
+      "lineno": 7,
+      "end_lineno": 15,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::PetRepository"
+    },
+    {
+      "node_type": "variable",
+      "name": "petsDb",
+      "source_code": "let petsDb = [\n    { id: '1', name: 'Fido', ownerId: '101' },\n    { id: '2', name: 'Whiskers', ownerId: '102' }\n];",
+      "lineno": 2,
+      "end_lineno": 5,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::VAR::petsDb"
+    },
+    {
+      "node_type": "function",
+      "usage_count": 0,
+      "name": "deleteById",
+      "parent_class": "PetRepository",
+      "is_method": true,
+      "parameters": [
+        "petId"
+      ],
+      "signature": "deleteById(petId)",
+      "docstring": null,
+      "lineno": 8,
+      "end_lineno": 14,
+      "calls": [
+        "filter"
+      ],
+      "uses": [
+        "petId",
+        "pet",
+        "petsDb",
+        "initialLength"
+      ],
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::PetRepository.deleteById"
+    },
+    {
+      "node_type": "variable",
+      "name": "router",
+      "source_code": "const router = require('express').Router();",
+      "lineno": 1,
+      "end_lineno": 1,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js::VAR::router"
+    },
+    {
+      "node_type": "function",
+      "usage_count": 4,
+      "name": "GET::/system-logs",
+      "parent_class": null,
+      "is_method": false,
+      "parameters": [
+        "req",
+        "res"
+      ],
+      "signature": "GET::/system-logs(req, res)",
+      "docstring": null,
+      "lineno": 5,
+      "end_lineno": 7,
+      "calls": [
+        "json"
+      ],
+      "uses": [
+        "res"
+      ],
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js::GET::/system-logs"
+    },
+    {
+      "node_type": "function",
+      "usage_count": 4,
+      "name": "POST::/wipe-database",
+      "parent_class": null,
+      "is_method": false,
+      "parameters": [
+        "req",
+        "res"
+      ],
+      "signature": "POST::/wipe-database(req, res)",
+      "docstring": null,
+      "lineno": 15,
+      "end_lineno": 17,
+      "calls": [
+        "json"
+      ],
+      "uses": [
+        "res"
+      ],
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js::POST::/wipe-database"
+    },
+    {
+      "node_type": "function",
+      "usage_count": 0,
+      "name": "router.post(/wipe-database)",
+      "parent_class": null,
+      "is_method": false,
+      "parameters": [
+        "req",
+        "res"
+      ],
+      "signature": "router.post(/wipe-database)(req, res)",
+      "docstring": null,
+      "lineno": 15,
+      "end_lineno": 17,
+      "calls": [
+        "json"
+      ],
+      "uses": [
+        "res"
+      ],
+      "parent_schema_name": "router",
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js::router.post(/wipe-database)"
+    },
+    {
+      "node_type": "variable",
+      "name": "router",
+      "source_code": "const router = require('express').Router();",
+      "lineno": 2,
+      "end_lineno": 2,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/pet.routes.js::VAR::router"
+    },
+    {
+      "node_type": "variable",
+      "name": "petController",
+      "source_code": "const petController = require('../controllers/pet.controller');",
+      "lineno": 3,
+      "end_lineno": 3,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/pet.routes.js::VAR::petController"
+    },
+    {
+      "node_type": "variable",
+      "name": "jwt",
+      "source_code": "const jwt = require('jsonwebtoken');",
+      "lineno": 1,
+      "end_lineno": 1,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::VAR::jwt"
+    },
+    {
+      "node_type": "variable",
+      "name": "JWT_SECRET",
+      "source_code": "const JWT_SECRET = \"super-secret-key-123\";",
+      "lineno": 5,
+      "end_lineno": 5,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::VAR::JWT_SECRET"
+    },
+    {
+      "node_type": "function",
+      "usage_count": 0,
+      "name": "authenticate",
+      "parent_class": null,
+      "is_method": false,
+      "parameters": [
+        "req",
+        "res",
+        "next"
+      ],
+      "signature": "authenticate(req, res, next)",
+      "docstring": null,
+      "lineno": 7,
+      "end_lineno": 25,
+      "calls": [
+        "next",
+        "json",
+        "verify",
+        "split",
+        "status"
+      ],
+      "uses": [
+        "next",
+        "decoded",
+        "jwt",
+        "err",
+        "res",
+        "token",
+        "req",
+        "JWT_SECRET"
+      ],
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::authenticate"
+    },
+    {
+      "node_type": "function",
+      "usage_count": 0,
+      "name": "requireRole",
+      "parent_class": null,
+      "is_method": false,
+      "parameters": [
+        "requiredRole"
+      ],
+      "signature": "requireRole(requiredRole)",
+      "docstring": null,
+      "lineno": 2,
+      "end_lineno": 10,
+      "calls": [
+        "next",
+        "status",
+        "json"
+      ],
+      "uses": [
+        "req",
+        "next",
+        "res",
+        "requiredRole"
+      ],
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/role.js::requireRole"
+    },
+    {
+      "node_type": "class",
+      "name": "PetController",
+      "docstring": null,
+      "lineno": 4,
+      "end_lineno": 19,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::PetController"
+    },
+    {
+      "node_type": "variable",
+      "name": "petService",
+      "source_code": "const petService = require('../services/pet.service');",
+      "lineno": 2,
+      "end_lineno": 2,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::VAR::petService"
+    },
+    {
+      "node_type": "function",
+      "usage_count": 0,
+      "name": "deletePet",
+      "parent_class": "PetController",
+      "is_method": true,
+      "parameters": [
+        "req",
+        "res"
+      ],
+      "signature": "deletePet(req, res)",
+      "docstring": null,
+      "lineno": 5,
+      "end_lineno": 18,
+      "calls": [
+        "status",
+        "removePet",
+        "json"
+      ],
+      "uses": [
+        "result",
+        "petId",
+        "petService",
+        "userId",
+        "res",
+        "error",
+        "req"
+      ],
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::PetController.deletePet"
+    },
+    {
+      "node_type": "class",
+      "name": "PetService",
+      "docstring": null,
+      "lineno": 4,
+      "end_lineno": 12,
+      "usage_count": 8,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::PetService"
+    },
+    {
+      "node_type": "variable",
+      "name": "petRepository",
+      "source_code": "const petRepository = require('../repositories/pet.repository');",
+      "lineno": 2,
+      "end_lineno": 2,
+      "usage_count": 4,
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::VAR::petRepository"
+    },
+    {
+      "node_type": "function",
+      "usage_count": 8,
+      "name": "removePet",
+      "parent_class": "PetService",
+      "is_method": true,
+      "parameters": [
+        "petId",
+        "userId"
+      ],
+      "signature": "removePet(petId, userId)",
+      "docstring": null,
+      "lineno": 5,
+      "end_lineno": 11,
+      "calls": [
+        "deleteById"
+      ],
+      "uses": [
+        "petId",
+        "petRepository"
+      ],
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::PetService.removePet"
+    },
+    {
+      "node_type": "function",
+      "usage_count": 0,
+      "name": "calculateCircleArea",
+      "parent_class": null,
+      "is_method": false,
+      "parameters": [
+        "radius"
+      ],
+      "signature": "calculateCircleArea(radius)",
+      "docstring": null,
+      "lineno": 9,
+      "end_lineno": 12,
+      "calls": [],
+      "uses": [
+        "Math",
+        "Error",
+        "radius"
+      ],
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/utils/geometry-calculator.js::calculateCircleArea"
+    },
+    {
+      "node_type": "function",
+      "usage_count": 0,
+      "name": "calculateHypotenuse",
+      "parent_class": null,
+      "is_method": false,
+      "parameters": [
+        "a",
+        "b"
+      ],
+      "signature": "calculateHypotenuse(a, b)",
+      "docstring": null,
+      "lineno": 14,
+      "end_lineno": 16,
+      "calls": [
+        "sqrt"
+      ],
+      "uses": [
+        "Math",
+        "a",
+        "b"
+      ],
+      "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/utils/geometry-calculator.js::calculateHypotenuse"
+    }
+  ],
+  "edges": [
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js::VAR::express"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js::VAR::adminRoutes"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js::VAR::petRoutes"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js::VAR::app"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/app.js::VAR::PORT"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::PetRepository"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::VAR::petsDb"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js::VAR::router"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js::GET::/system-logs"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js::POST::/wipe-database"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/admin.routes.js::router.post(/wipe-database)"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/pet.routes.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/pet.routes.js::VAR::router"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/pet.routes.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/pet.routes.js::VAR::petController"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::VAR::jwt"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::VAR::JWT_SECRET"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::authenticate"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/role.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/role.js::requireRole"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::PetController"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::VAR::petService"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::PetService"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::VAR::petRepository"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/utils/geometry-calculator.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/utils/geometry-calculator.js::calculateCircleArea"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/utils/geometry-calculator.js",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/utils/geometry-calculator.js::calculateHypotenuse"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::PetRepository",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::PetRepository.deleteById"
+    },
+    {
+      "edge_type": "depends_on",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::PetRepository.deleteById",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::VAR::petsDb"
+    },
+    {
+      "edge_type": "depends_on",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::authenticate",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::VAR::jwt"
+    },
+    {
+      "edge_type": "depends_on",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::authenticate",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::VAR::JWT_SECRET"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::PetController",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::PetController.deletePet"
+    },
+    {
+      "edge_type": "depends_on",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::PetController.deletePet",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::VAR::petService"
+    },
+    {
+      "edge_type": "contains",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::PetService",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::PetService.removePet"
+    },
+    {
+      "edge_type": "depends_on",
+      "source": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::PetService.removePet",
+      "target": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::VAR::petRepository"
+    }
+  ]
+}

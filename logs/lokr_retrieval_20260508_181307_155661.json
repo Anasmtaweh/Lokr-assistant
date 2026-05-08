@@ -1,0 +1,137 @@
+[
+  {
+    "node_id": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::VAR::petsDb",
+    "node_type": "variable",
+    "name": "petsDb",
+    "source_code": "let petsDb = [\n    { id: '1', name: 'Fido', ownerId: '101' },\n    { id: '2', name: 'Whiskers', ownerId: '102' }\n];",
+    "lineno": 2,
+    "end_lineno": 5
+  },
+  {
+    "node_id": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::PetService",
+    "node_type": "class",
+    "name": "PetService",
+    "docstring": null,
+    "lineno": 4,
+    "end_lineno": 12,
+    "usage_count": 2
+  },
+  {
+    "node_id": "/home/anas/Lokr-assistant/lokr-demo-app/src/routes/pet.routes.js::VAR::petController",
+    "node_type": "variable",
+    "name": "petController",
+    "source_code": "const petController = require('../controllers/pet.controller');",
+    "lineno": 3,
+    "end_lineno": 3
+  },
+  {
+    "node_id": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::PetController",
+    "node_type": "class",
+    "name": "PetController",
+    "docstring": null,
+    "lineno": 4,
+    "end_lineno": 19
+  },
+  {
+    "node_id": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::VAR::petService",
+    "node_type": "variable",
+    "name": "petService",
+    "source_code": "const petService = require('../services/pet.service');",
+    "lineno": 2,
+    "end_lineno": 2
+  },
+  {
+    "node_id": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::VAR::petRepository",
+    "node_type": "variable",
+    "name": "petRepository",
+    "source_code": "const petRepository = require('../repositories/pet.repository');",
+    "lineno": 2,
+    "end_lineno": 2,
+    "usage_count": 1
+  },
+  {
+    "node_id": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::PetService.removePet",
+    "node_type": "function",
+    "usage_count": 2,
+    "name": "removePet",
+    "parent_class": "PetService",
+    "is_method": true,
+    "parameters": [
+      "petId",
+      "userId"
+    ],
+    "signature": "removePet(petId, userId)",
+    "docstring": null,
+    "lineno": 5,
+    "end_lineno": 11,
+    "calls": [
+      "deleteById"
+    ],
+    "uses": [
+      "petId",
+      "petRepository"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::PetController.deletePet",
+    "node_type": "function",
+    "usage_count": 0,
+    "name": "deletePet",
+    "parent_class": "PetController",
+    "is_method": true,
+    "parameters": [
+      "req",
+      "res"
+    ],
+    "signature": "deletePet(req, res)",
+    "docstring": null,
+    "lineno": 5,
+    "end_lineno": 18,
+    "calls": [
+      "status",
+      "removePet",
+      "json"
+    ],
+    "uses": [
+      "result",
+      "petId",
+      "petService",
+      "userId",
+      "res",
+      "error",
+      "req"
+    ]
+  },
+  {
+    "node_id": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::PetRepository",
+    "node_type": "class",
+    "name": "PetRepository",
+    "docstring": null,
+    "lineno": 7,
+    "end_lineno": 15
+  },
+  {
+    "node_id": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::PetRepository.deleteById",
+    "node_type": "function",
+    "usage_count": 0,
+    "name": "deleteById",
+    "parent_class": "PetRepository",
+    "is_method": true,
+    "parameters": [
+      "petId"
+    ],
+    "signature": "deleteById(petId)",
+    "docstring": null,
+    "lineno": 8,
+    "end_lineno": 14,
+    "calls": [
+      "filter"
+    ],
+    "uses": [
+      "petId",
+      "pet",
+      "petsDb",
+      "initialLength"
+    ]
+  }
+]
