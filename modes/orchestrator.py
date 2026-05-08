@@ -44,6 +44,15 @@ def _classify_intent(user_input: str, llm_client: LLMClient, lokr_service: Optio
         "debug", "patch", "security bypass", "security vulnerability",
         "race condition", "crashes with", "throws error", "throws an error",
         "bug in", "buggy", "diagnose", "deep audit",
+        # IDOR / access-control / ownership bypass patterns
+        "i can delete", "i can access", "i can modify", "i can edit", "i can update",
+        "i can see", "i can view", "i can read",
+        "another user", "other user", "someone else",
+        "idor", "unauthorized", "without permission", "bypass", "privilege escalation",
+        "how is this possible", "how is it possible", "shouldn't be able",
+        "should not be able", "missing ownership", "missing authorization",
+        "missing authentication", "no ownership", "no auth check", "no permission check",
+        "access control", "insecure direct", "object reference",
     ]
     fast_path_intent = None
     lower_input = user_input.lower()
@@ -66,14 +75,18 @@ def _classify_intent(user_input: str, llm_client: LLMClient, lokr_service: Optio
 If the user provides a block of text that contains a unified diff (lines starting with '---', '+++', or '@@'), or explicitly asks for a code review ('review this diff', 'is this change safe?', 'should I merge this?'), the intent is "review".
 
 Classify the user's input into one of the following intents:
-- "repair": User describes a bug, error, unexpected behavior, or explicitly asks to fix something. The user is asking YOU to diagnose and patch the code.
+- "repair": User describes a bug, error, unexpected behavior, access control flaw, or security vulnerability — and is asking YOU to diagnose and fix it. This INCLUDES reports like "I can delete another user's data", "users can access resources they shouldn't", "there's an IDOR", "how is this possible" (when describing a bug).
 - "review": User provides a diff and asks for safety/quality check.
 - "prevent": The user asks whether they can deploy, asks for deployment readiness, or mentions commits since last deploy, outstanding TODOs, breaking changes, deployment blockers, or security vulnerabilities. Also choose "prevent" if the user is DESCRIBING changes they made and asking whether they are safe — they are not asking you to fix anything, they are asking you to evaluate.
-- "explain": Only pure questions asking "how does X work?" or "explain Y", without any indication of a problem to fix.
+- "explain": ONLY pure conceptual questions asking "how does X work?" or "explain Y", with NO indication of a bug or unexpected behavior.
 
 IMPORTANT DISAMBIGUATION:
-- If the user says "I've applied changes" or "I've made modifications" and mentions blockers/vulnerabilities/breaking changes, the intent is "prevent" (deployment readiness check), NOT "repair". The user is describing what they did, not asking you to fix a bug.
-- "repair" requires the user to be asking YOU to find and fix something. If the user already knows what changed and is asking whether it's safe, that's "prevent".
+- "I can delete another user's pet" → "repair" (user is reporting an access control bug, even if phrased as a question)
+- "Why can I see other users' data?" → "repair" (unexpected behavior = bug to fix)
+- "I can bypass authentication" → "repair" (security vulnerability to patch)
+- "How does JWT work?" → "explain" (pure conceptual, no bug)
+- If the user says "I've applied changes" or "I've made modifications" and asks whether it's safe → "prevent".
+- "repair" requires the user to be reporting something broken or exploitable. If the user already knows what changed and is asking whether it's safe, that's "prevent".
 
 You must output ONLY valid JSON in the following format:
 {
