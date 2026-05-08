@@ -143,5 +143,6 @@ Thumbs.db
 # Lokr specific 
 scratch/
 brain/
-!demo_project/.lokr/**
-!demo_project/data/**
+!lokr-demo-app/.lokr/**
+!lokr-demo-app/data/**
+lokr-demo-app/data/vector_store/**
