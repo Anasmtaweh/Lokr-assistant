@@ -312,13 +312,17 @@ def _prescan_for_backdoors(files_to_analyze: list, lokr_service) -> list:
     findings = []
     finding_counter = 0
 
-    scan_files = list(files_to_analyze) if files_to_analyze else []
+    scan_files = []
+    if lokr_service and lokr_service.project_path:
+        for root, dirs, files in os.walk(lokr_service.project_path):
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', 'logs', 'dist', 'build']]
+            for f in files:
+                if f.endswith(('.js', '.ts', '.py', '.java', '.go')):
+                    scan_files.append(os.path.join(root, f))
+    elif files_to_analyze:
+        scan_files = list(files_to_analyze)
 
-    for filepath in scan_files:
-        # Resolve absolute path
-        resolved = filepath
-        if not os.path.isabs(resolved) and lokr_service:
-            resolved = os.path.join(getattr(lokr_service, 'project_path', ''), filepath.lstrip('/'))
+    for resolved in scan_files:
         if not os.path.exists(resolved):
             continue
 
@@ -341,7 +345,7 @@ def _prescan_for_backdoors(files_to_analyze: list, lokr_service) -> list:
                 "vulnerability_class": "Authentication Bypass / Backdoor",
                 "severity_tier": "CAT-0_CRITICAL",
                 "location": {
-                    "file": filepath,
+                    "file": os.path.relpath(resolved, lokr_service.project_path) if lokr_service else resolved,
                     "line": line_num,
                     "code": matched_text[:200]
                 },
@@ -363,7 +367,7 @@ def _prescan_for_backdoors(files_to_analyze: list, lokr_service) -> list:
                     "vulnerability_class": "Hardcoded Debug Header",
                     "severity_tier": "CAT-0_CRITICAL",
                     "location": {
-                        "file": filepath,
+                        "file": os.path.relpath(resolved, lokr_service.project_path) if lokr_service else resolved,
                         "line": line_num,
                         "code": stripped[:200]
                     },
@@ -395,7 +399,7 @@ def _prescan_for_backdoors(files_to_analyze: list, lokr_service) -> list:
                     "vulnerability_class": "Hardcoded Role Escalation",
                     "severity_tier": "CAT-0_CRITICAL",
                     "location": {
-                        "file": filepath,
+                        "file": os.path.relpath(resolved, lokr_service.project_path) if lokr_service else resolved,
                         "line": line_num,
                         "code": stripped[:200]
                     },
