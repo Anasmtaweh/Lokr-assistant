@@ -108,7 +108,7 @@ class SafetyAgent(BaseAgent):
             latest_hyp = state["hypotheses"][-1]
             contrib = latest_hyp.get("contribution", latest_hyp)
             diagnosis_text = contrib.get("diagnosis", "")
-            diagnosis_issues = contrib.get("issues", [])
+            diagnosis_issues = contrib.get("issues", []) or contrib.get("findings", [])
 
         if llm_client:
             system_prompt = get_agent_prompt("safety", mode)

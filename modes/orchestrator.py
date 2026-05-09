@@ -794,12 +794,13 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             # ------------------------------------------------------
 
             if intent == "repair":
-                if not findings and (not diagnosis or "no diagnosis" in diagnosis.lower()):
+                hypothesis = contrib.get("hypothesis", "").lower()
+                # Use hypothesis instead of diagnosis since repair mode uses hypothesis
+                if not findings and (not hypothesis or "unknown" in hypothesis or "no" in hypothesis):
                     state["status"] = "failed"
-                    state["error"] = "PIPELINE_ABORTED_NO_GROUNDED_DIAGNOSIS"
-                    print("[ORCHESTRATOR] HARD FAIL: Analyzer produced no findings and no diagnosis.")
+                    state["error"] = "PIPELINE_ABORTED_NO_GROUNDED_FINDINGS"
+                    print("[ORCHESTRATOR] HARD FAIL: Analyzer produced no findings and no conclusive hypothesis.")
                     break
-                
         # 2. Action Step (also handles Safety-requested revisions)
         elif len(state["actions"]) == 0 or state["status"] in ["needs_new_action", "needs_action_revision"]:
             # If we are retrying due to a failure, we inject feedback and clear history to force re-analysis
@@ -874,7 +875,8 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                     
                     diagnosis = ""
                     if state.get("hypotheses"):
-                        diagnosis = state["hypotheses"][-1].get("contribution", {}).get("diagnosis", "")
+                        contrib = state["hypotheses"][-1].get("contribution", {})
+                        diagnosis = contrib.get("diagnosis", "") or contrib.get("hypothesis", "")
                     
                     import re
                     state["original_input"] = re.sub(r'\n\n### PATCH SANITY FAILURE\n.*?(?=\n\n### |$)', '', state["original_input"], flags=re.DOTALL)

@@ -130,11 +130,11 @@ class ActionAgent(BaseAgent):
                     latest_hypothesis = state["hypotheses"][-1]
                     if "contribution" in latest_hypothesis:
                         diagnosis = latest_hypothesis["contribution"].get("diagnosis", "")
-                        issues_list = latest_hypothesis["contribution"].get("issues", [])
+                        issues_list = latest_hypothesis["contribution"].get("issues", []) or latest_hypothesis["contribution"].get("findings", [])
                         hypothesis = latest_hypothesis["contribution"].get("hypothesis", "")
                     else:
                         diagnosis = latest_hypothesis.get("diagnosis", "")
-                        issues_list = latest_hypothesis.get("issues", [])
+                        issues_list = latest_hypothesis.get("issues", []) or latest_hypothesis.get("findings", [])
                         hypothesis = latest_hypothesis.get("hypothesis", "")
                 
                 user_msg = f"DIAGNOSIS TO ACT UPON:\n{diagnosis}\n"
