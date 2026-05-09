@@ -383,7 +383,7 @@ def _prescan_for_backdoors(files_to_analyze: list, lokr_service) -> list:
                     "vulnerability_class": "Header-Based Auth Bypass",
                     "severity_tier": "CAT-0_CRITICAL",
                     "location": {
-                        "file": filepath,
+                        "file": os.path.relpath(resolved, lokr_service.project_path) if lokr_service else resolved,
                         "line": line_num,
                         "code": stripped[:200]
                     },
