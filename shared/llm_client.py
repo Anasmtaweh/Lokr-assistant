@@ -53,7 +53,8 @@ class LLMClient:
             payload = {
                 "model": self.model,
                 "messages": messages,
-                "temperature": temperature
+                "temperature": temperature,
+                "max_tokens": 4096
             }
         else:
             url = f"{self.base_url}/api/chat"
@@ -63,7 +64,8 @@ class LLMClient:
                 "messages": messages,
                 "stream": False,
                 "options": {
-                    "temperature": temperature
+                    "temperature": temperature,
+                    "num_predict": 4096
                 }
             }
 
