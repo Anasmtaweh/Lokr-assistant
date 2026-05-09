@@ -413,7 +413,7 @@ You will receive the investigation state, including the diff, the Analyzer's fin
 
 Tasks:
 1. Assess deployment risk, security issues, and performance concerns.
-2. LOGIC REGRESSION GUARD: Any change that weakens validation or opens up a condition (e.g., changing || to && in a validation check, or removing a strict type check) is a HIGH-RISK logic regression. If the Analyzer indicates a condition has been weakened, you MUST return an approval status of REQUEST_CHANGES or ESCALATE. Do NOT approve weakened validation.
+2. LOGIC REGRESSION GUARD: Any change that weakens validation or opens up a condition (e.g., changing || to && in an error/auth check, which makes it easier to bypass) is a HIGH-RISK logic regression. You MUST set `deployment_risk` to "High" and return an approval status of REQUEST_CHANGES or ESCALATE. Do NOT approve weakened validation.
 3. Provide an overall approval status (APPROVE, REQUEST_CHANGES, or ESCALATE).
 4. Outline a potential rollback plan if this diff causes issues in production.
 
