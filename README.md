@@ -33,6 +33,12 @@ pinned: false
 - ✅ **3.1x Revision Speed** — Safety → Action targeted feedback saves 70% of tokens per revision cycle
 - ✅ **Forensically Hardened** — Fail-loud validation, token tracking, grounding ratio logging
 
+### ⚠️ Note for Judges (Configuration)
+To properly evaluate this multi-agent architecture, please configure the LLM backend via the UI sidebar:
+1. **API URL & Key:** Please input your own OpenAI-compatible API URL and API Key. Examples are provided in the UI placeholders.
+2. **Model Selection:** Please input the exact Model Name for your chosen provider.
+3. **Minimum Requirements:** You MUST use a highly capable model with **33B parameters or higher** (e.g., `Qwen2.5-Coder-32B-Instruct`). The framework orchestrates multiple specialized agents that rely on complex JSON output parsing; smaller models will suffer from context truncation.
+
 </div>
 
 ---
@@ -476,8 +482,8 @@ Blockers:
 **Pre-scan detects:**
 ```
 [PRESCAN] 🔴 Detected 2 backdoor pattern(s)
-  [PRESCAN-001] Hardcoded Debug Header in backend/middleware/auth.js:12
-  [PRESCAN-002] Authentication Bypass / Backdoor in backend/middleware/auth.js:15
+  [PRESCAN-001] Hardcoded Debug Header in src/middleware/auth.js:12
+  [PRESCAN-002] Authentication Bypass / Backdoor in src/middleware/auth.js:15
 ```
 
 **Expected Result:** 
@@ -635,7 +641,7 @@ Intent Classifier (keywords + LLM)
 ### Prerequisites
 
 - **Python 3.8+**
-- **Ollama** (for local privacy) OR any **OpenAI-compatible API** (e.g., AMD GPU endpoints, Groq)
+- **Ollama** (for local privacy) OR any **OpenAI-compatible API**
 - **Lokr (dev-oracle)** indexed on your project *(optional but recommended)*
 
 ### Installation
@@ -654,7 +660,7 @@ cd Lokr-assistant
 The easiest way to run the assistant with all dependencies and the demo app mounted:
 
 ```bash
-# Export your API Key if you plan to use a remote model (e.g., Groq, OpenAI)
+# Export your API Key if you plan to use a remote model
 export API_KEY="your_api_key_here"
 
 # Build and start the container
@@ -691,7 +697,7 @@ streamlit run app.py
 ### 🌐 Running on Public Environments (Hugging Face Spaces)
 
 If you are hosting or visiting Lokr Assistant on a public platform like Hugging Face Spaces:
-- **Using Remote APIs (Groq, OpenAI):** If the space owner configured an `API_KEY` secret, it will auto-populate. **However, any user can simply delete the pre-filled key in the sidebar and paste their own API key** without affecting the space or other users.
+- **Using Remote APIs:** If the space owner configured an `API_KEY` secret, it will auto-populate. **However, any user can simply delete the pre-filled key in the sidebar and paste their own API key** without affecting the space or other users.
 - **Using Local Models (Ollama) Remotely:** A public space runs on a remote server. Using `http://localhost:11434` will try to connect to the space's server, not your personal computer. To connect a public space to *your* local Ollama:
   1. Expose your local Ollama port (11434) using a tool like [Ngrok](https://ngrok.com/).
   2. Paste your Ngrok URL into the **"Ollama Base URL"** field in the sidebar.
@@ -699,7 +705,7 @@ If you are hosting or visiting Lokr Assistant on a public platform like Hugging 
 
 The UI will:
 1. Auto-detect available Ollama models
-2. Allow switching between local Ollama and remote API (Groq, OpenAI)
+2. Allow switching between local Ollama and remote APIs
 3. Show live agent progress with `st.status` updates
 4. Display forensic logs and token counts in expanders
 
@@ -719,7 +725,7 @@ python main.py review -d "diff --git a/file.py b/file.py"
 
 ## 🛠️ Tech Stack
 
-- **LLM Backend:** Dual-support for [Ollama](https://ollama.com) (local/private) and **OpenAI-Compatible APIs** (e.g., AMD GPU endpoints, Groq) via UI toggle.
+- **LLM Backend:** Dual-support for [Ollama](https://ollama.com) (local/private) and **OpenAI-Compatible APIs** via UI toggle.
 - **Code Intelligence:** [Lokr](https://github.com/Anasmtaweh/lokr) (Bundled as a submodule)
   - **Parsing:** Tree-sitter (AST extraction for JS, TS, Python, etc.)
   - **Vector Search:** ChromaDB (Semantic node retrieval)

@@ -86,9 +86,9 @@ if api_choice == "Local (Ollama)":
         model = model_choice
 else:
     api_type = "openai"
-    base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
-    model = st.sidebar.text_input("Model Name", value="llama-3.3-70b-versatile")
-    api_key = st.sidebar.text_input("API Key", value=env_api_key, type="password")
+    base_url = st.sidebar.text_input("API Base URL", value="", placeholder="e.g., https://api.openai.com/v1")
+    model = st.sidebar.text_input("Model Name", value="", placeholder="e.g., Qwen2.5-Coder-32B-Instruct")
+    api_key = st.sidebar.text_input("API Key", value=env_api_key, type="password", placeholder="Enter your API Key")
 st.sidebar.info("Describe your problem or question in the main area. The assistant will automatically determine the best workflow.")
 
 # Custom Header
