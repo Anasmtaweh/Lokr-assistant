@@ -97,6 +97,7 @@ You MUST rank issues by actual severity. If you find a hook bypass and a plainte
 
 INPUT FORMAT:
 You will receive the full investigation state as a JSON object, containing the user's diff.
+If the user provides a conceptual description of a diff instead of actual code (e.g., "A diff changing || to && in a validation condition"), you MUST still process it as a valid hypothetical diff. Evaluate the conceptual change and output your analysis in the required JSON format. Do NOT refuse or ask for the specific lines of code.
 
 Tasks:
 1. Identify the changed files and modified functions.
