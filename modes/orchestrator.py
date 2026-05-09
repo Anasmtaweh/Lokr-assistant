@@ -599,10 +599,28 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             analyzer_structured_input += f"- {f}\n"
         analyzer_structured_input += "\n"
     
+    if lokr_service and lokr_service.project_path:
+        tree_lines = []
+        for root, dirs, files in os.walk(lokr_service.project_path):
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', 'logs', 'dist', 'build']]
+            rel_path = os.path.relpath(root, lokr_service.project_path)
+            rel_path = "" if rel_path == "." else f"{rel_path}/"
+            for f in files:
+                if f.endswith(('.js', '.ts', '.py', '.java', '.go', '.md')):
+                    tree_lines.append(f"  {rel_path}{f}")
+        if tree_lines:
+            file_tree_str = "PROJECT FILE TREE:\n" + "\n".join(tree_lines[:100]) + "\n\n"
+            analyzer_structured_input += file_tree_str
+            final_input_context = file_tree_str + user_input
+        else:
+            final_input_context = user_input
+    else:
+        final_input_context = user_input
+        
     analyzer_structured_input += (
         "INSTRUCTION: If you need more context (file summaries, dependency chains, "
         "full source code), populate the 'lokr_requests' array in your JSON response.\n"
-        "Examples: \"file summary of backend/middleware/auth.js\", "
+        "Examples: \"file summary of api/middleware/auth.js\", "
         "\"get dependencies of deletePet\"\n"
     )
     
@@ -628,7 +646,7 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
         print(f"[FORENSIC][WARNING] Analyzer input exceeds 8k token budget ({est_tokens} tokens). Context may be too large.")
     
     # Build compact context for the Action Agent and Validator
-    final_input_context = user_input
+    # final_input_context is already initialized above
     if relevant_snippet:
         final_input_context += f"\n\n### RELEVANT FUNCTION CODE\n{relevant_snippet}"
     focused_code_context = final_input_context
