@@ -86,9 +86,9 @@ Reject phrases like "potential vulnerability", "possible issue", "ensure validat
 
 FORCE EXECUTION TRACE:
 You MUST reconstruct the exploit path exactly. Example:
-Request enters: backend/middleware/userMiddleware.js
+Request enters: api/middleware/userMiddleware.js
 Condition: req.user.role !== 'user'
-Then route: backend/routes/pets.js
+Then route: api/routes/items.js
 Condition: req.user.role !== 'admin'
 Result: No principal satisfies both conditions simultaneously.
 
@@ -140,9 +140,9 @@ Reject phrases like "potential vulnerability", "possible issue", "ensure validat
 
 FORCE EXECUTION TRACE:
 You MUST reconstruct the exploit path exactly. Example:
-Request enters: backend/middleware/userMiddleware.js
+Request enters: api/middleware/userMiddleware.js
 Condition: req.user.role !== 'user'
-Then route: backend/routes/pets.js
+Then route: api/routes/items.js
 Condition: req.user.role !== 'admin'
 Result: No principal satisfies both conditions simultaneously.
 
@@ -157,7 +157,7 @@ LOKR REQUESTS (GRAPH-RAG CHEAT SHEET):
 You have access to 'Lokr', a Graph-RAG codebase intelligence engine. You MUST use it to trace execution paths across multiple files.
 To use it, add specific query strings to the "lokr_requests" array. You MUST use these exact phrasing patterns to trigger the Graph engine:
 1. "get dependencies of <functionName>" - Finds where a function is called or what it calls (e.g., "get dependencies of deletePet").
-2. "file summary of <filePath>" - Gets the layout, imports, and logic of a whole file (e.g., "file summary of backend/routes/pets.js").
+2. "file summary of <filePath>" - Gets the layout, imports, and logic of a whole file (e.g., "file summary of api/routes/items.js").
 
 STRICT GRAPH-WALKING RULES:
 - If you find a bug in a middleware, you MUST request "get dependencies of <middlewareName>" or the file summary of the route that uses it. You cannot fix a middleware without checking the route it protects.

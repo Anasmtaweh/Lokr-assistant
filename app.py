@@ -269,8 +269,17 @@ if user_input:
             st.divider()
             st.markdown("### 🛡️ Safety & Risk")
             s_col1, s_col2, s_col3 = st.columns(3)
-            risk_score = safety.get("risk_score", 0.0)
-            risk_level = "LOW" if risk_score < 0.3 else ("MEDIUM" if risk_score < 0.7 else "HIGH")
+            if mode == "prevent":
+                risk_level = str(safety.get("deployment_risk", "UNKNOWN")).upper()
+                # Synthesize a risk score based on the risk level for display
+                if risk_level == "HIGH": risk_score = 1.0
+                elif risk_level == "MEDIUM": risk_score = 0.5
+                elif risk_level == "LOW": risk_score = 0.1
+                else: risk_score = 0.0
+            else:
+                risk_score = safety.get("risk_score", 0.0)
+                risk_level = "LOW" if risk_score < 0.3 else ("MEDIUM" if risk_score < 0.7 else "HIGH")
+            
             s_col1.metric("Risk Level", risk_level)
             s_col2.metric("Risk Score", risk_score)
             
