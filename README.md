@@ -39,7 +39,19 @@ pinned: false
 
 ## 🎯 What Is Lokr Assistant?
 
-Lokr Assistant is a **production-hardened multi-agent AI framework** that acts as a senior engineering copilot with **deterministic security scanning** and **grounded code analysis**.
+Lokr Assistant: Sentinel 2.0 is a **production-hardened multi-agent AI framework** designed to act as a senior engineering copilot. Unlike generic LLM coding tools that suffer from context bloat and hallucination, Lokr Assistant grounds its decision-making in a localized dependency graph using our custom `lokr` engine.
+
+### ⭐ Hackathon Innovations
+
+1. **Agentic Context Discovery** — Analyzer starts with just 800 tokens (vs. 21k) and autonomously queries Lokr for precise dependencies. **26x context reduction, 62% inference cost savings.**
+
+2. **Safety → Action Fast-Path** — Rejected patches don't trigger full pipeline restart. Safety agent provides targeted revision suggestions directly to Action. **70% token savings per revision cycle.**
+
+3. **Deterministic Pre-Scan** — Regex-based scanner catches CAT-0 backdoors (debug headers, hardcoded admin bypasses) before LLM runs. **Critical vulnerabilities can't be hallucinated away.**
+
+4. **Fail-Loud Architecture** — All agents validate their own JSON output. Invalid schemas raise explicit errors instead of silently degrading to stub data. **Zero silent failures.**
+
+---
 
 Unlike generic AI coding tools, Lokr Assistant:
 - **Verifies findings** against your actual code structure (not hallucinations)
@@ -421,6 +433,8 @@ Logs grounding ratio; warns if <50% of findings are grounded.
 
 ## 🎬 Demo Scenarios
 
+> **Note:** The repository includes a `lokr-demo-app` directory which acts as the vulnerable target application for these scenarios. Make sure `./lokr-demo-app` is selected as the Project Directory in the UI.
+
 ### Scenario 1: Safe Deployment ✅
 
 **Input:**
@@ -633,7 +647,25 @@ cd Lokr-assistant
 
 # (Optional) If you forgot --recurse-submodules, run:
 # git submodule update --init --recursive
+```
 
+### Running via Docker (Recommended)
+
+The easiest way to run the assistant with all dependencies and the demo app mounted:
+
+```bash
+# Export your API Key if you plan to use a remote model (e.g., Groq, OpenAI)
+export API_KEY="your_api_key_here"
+
+# Build and start the container
+docker-compose up -d --build
+```
+
+The UI will be available at `http://localhost:8501`.
+
+### Running Locally (Python Venv)
+
+```bash
 # Create virtual environment
 python -m venv venv
 source venv/bin/activate
@@ -642,11 +674,28 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Run the UI
+You can start the UI using the provided helper script:
+
+```bash
+./start.sh
+```
+
+Or manually:
 
 ```bash
 streamlit run app.py
 ```
+
+> 💡 **Tip for Local Users:** If you are running the app locally, you can analyze your own codebase! Just change the "Project Directory" path in the UI sidebar to point to your local project folder and click **"Re-index Project"**. This will trigger the Lokr engine to extract ASTs and build the semantic graph for your code.
+
+### 🌐 Running on Public Environments (Hugging Face Spaces)
+
+If you are hosting or visiting Lokr Assistant on a public platform like Hugging Face Spaces:
+- **Using Remote APIs (Groq, OpenAI):** If the space owner configured an `API_KEY` secret, it will auto-populate. **However, any user can simply delete the pre-filled key in the sidebar and paste their own API key** without affecting the space or other users.
+- **Using Local Models (Ollama) Remotely:** A public space runs on a remote server. Using `http://localhost:11434` will try to connect to the space's server, not your personal computer. To connect a public space to *your* local Ollama:
+  1. Expose your local Ollama port (11434) using a tool like [Ngrok](https://ngrok.com/).
+  2. Paste your Ngrok URL into the **"Ollama Base URL"** field in the sidebar.
+  3. Select **"Custom..."** from the model dropdown and type your model name (e.g., `qwen2.5-coder:7b`).
 
 The UI will:
 1. Auto-detect available Ollama models

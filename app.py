@@ -1,4 +1,5 @@
 import streamlit as st
+
 import json
 import requests
 import subprocess
@@ -75,10 +76,14 @@ api_choice = st.sidebar.radio("LLM Provider", ["Local (Ollama)", "Remote API (Op
 
 if api_choice == "Local (Ollama)":
     api_type = "ollama"
-    base_url = "http://localhost:11434"
+    base_url = st.sidebar.text_input("Ollama Base URL", value="http://localhost:11434", help="If running on a public space, use an Ngrok URL to connect to your local Ollama.")
     api_key = ""
     default_idx = available_models.index("qwen2.5-coder:7b") if "qwen2.5-coder:7b" in available_models else 0
-    model = st.sidebar.selectbox("Model", available_models, index=default_idx)
+    model_choice = st.sidebar.selectbox("Model", available_models + ["Custom..."], index=default_idx)
+    if model_choice == "Custom...":
+        model = st.sidebar.text_input("Custom Model Name", value="qwen2.5-coder:7b")
+    else:
+        model = model_choice
 else:
     api_type = "openai"
     base_url = st.sidebar.text_input("API Base URL", value="https://api.groq.com/openai/v1")
