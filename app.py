@@ -269,7 +269,7 @@ if user_input:
             st.divider()
             st.markdown("### 🛡️ Safety & Risk")
             s_col1, s_col2, s_col3 = st.columns(3)
-            if mode == "prevent":
+            if mode in ["prevent", "review"]:
                 risk_level = str(safety.get("deployment_risk", "UNKNOWN")).upper()
                 # Synthesize a risk score based on the risk level for display
                 if risk_level == "HIGH": risk_score = 1.0
@@ -285,6 +285,8 @@ if user_input:
             
             if mode == "prevent":
                 is_safe = safety.get("go_no_go", "") == "SAFE_TO_DEPLOY"
+            elif mode == "review":
+                is_safe = safety.get("approval", "") == "APPROVE"
             else:
                 is_safe = safety.get("safe", False)
                 
