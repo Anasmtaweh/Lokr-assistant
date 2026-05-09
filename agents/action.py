@@ -132,12 +132,16 @@ class ActionAgent(BaseAgent):
                         diagnosis = latest_hypothesis["contribution"].get("diagnosis", "")
                         issues_list = latest_hypothesis["contribution"].get("issues", []) or latest_hypothesis["contribution"].get("findings", [])
                         hypothesis = latest_hypothesis["contribution"].get("hypothesis", "")
+                        readiness_score = latest_hypothesis["contribution"].get("readiness_score")
                     else:
                         diagnosis = latest_hypothesis.get("diagnosis", "")
                         issues_list = latest_hypothesis.get("issues", []) or latest_hypothesis.get("findings", [])
                         hypothesis = latest_hypothesis.get("hypothesis", "")
+                        readiness_score = latest_hypothesis.get("readiness_score")
                 
                 user_msg = f"DIAGNOSIS TO ACT UPON:\n{diagnosis}\n"
+                if readiness_score is not None:
+                    user_msg += f"\nANALYZER READINESS SCORE: {readiness_score}\n"
                 if hypothesis:
                     user_msg += f"\nROOT CAUSE HYPOTHESIS:\n{hypothesis}\n"
                 if issues_list:

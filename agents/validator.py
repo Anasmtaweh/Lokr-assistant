@@ -86,7 +86,9 @@ class ValidatorAgent(BaseAgent):
         if llm_client:
             system_prompt = get_agent_prompt("validator", mode)
             
+            analyzer_result = state["hypotheses"][-1] if state.get("hypotheses") else {}
             context_for_llm = {
+                "analyzer_result": analyzer_result,
                 "action_result": action_result,
                 "safety_result": safety_result,
                 "original_code": original_code,

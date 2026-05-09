@@ -273,7 +273,13 @@ if user_input:
             risk_level = "LOW" if risk_score < 0.3 else ("MEDIUM" if risk_score < 0.7 else "HIGH")
             s_col1.metric("Risk Level", risk_level)
             s_col2.metric("Risk Score", risk_score)
-            s_col3.write(f"**Verdict:** {'✅ SAFE' if safety.get('safe') else '⚠️ WARNING'}")
+            
+            if mode == "prevent":
+                is_safe = safety.get("go_no_go", "") == "SAFE_TO_DEPLOY"
+            else:
+                is_safe = safety.get("safe", False)
+                
+            s_col3.write(f"**Verdict:** {'✅ SAFE' if is_safe else '⚠️ WARNING'}")
             for w in safety.get("warnings", []):
                 st.warning(w)
 
@@ -329,7 +335,11 @@ if user_input:
             if safety:
                 st.markdown('<div class="timeline-agent" style="border-color: #00ff88;">', unsafe_allow_html=True)
                 st.markdown("#### 3. 🛡️ Safety Agent")
-                st.markdown(f"**Verdict:** {'✅ PASS' if safety.get('safe') else '⚠️ WARNING/REJECTED'}")
+                if mode == "prevent":
+                    is_safe_trace = safety.get("go_no_go", "") == "SAFE_TO_DEPLOY"
+                else:
+                    is_safe_trace = safety.get("safe", False)
+                st.markdown(f"**Verdict:** {'✅ PASS' if is_safe_trace else '⚠️ WARNING/REJECTED'}")
                 st.markdown(f"**Reasoning:** {safety.get('reasoning', 'Evaluated deployment risk.')}")
                 
                 cot = raw_safety[-1].get("chain_of_thought", []) if raw_safety else []

@@ -109,10 +109,13 @@ class SafetyAgent(BaseAgent):
             contrib = latest_hyp.get("contribution", latest_hyp)
             diagnosis_text = contrib.get("diagnosis", "")
             diagnosis_issues = contrib.get("issues", []) or contrib.get("findings", [])
+            readiness_score = contrib.get("readiness_score")
 
         if llm_client:
             system_prompt = get_agent_prompt("safety", mode)
             user_msg = f"PROPOSED ACTION TO EVALUATE:\n{json.dumps(proposed_action, indent=2)}\n"
+            if readiness_score is not None:
+                user_msg += f"\nANALYZER READINESS SCORE: {readiness_score}\n"
             
             # Include the original code context so the Safety Agent can verify
             # cross-file consistency (e.g., middleware role checks vs route requirements)
