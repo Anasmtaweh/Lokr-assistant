@@ -105,6 +105,10 @@ Tasks:
 3. MENTAL EXECUTION OF BOOLEAN LOGIC: When you see a change in a boolean expression or condition (e.g., && vs ||, === vs !==, > vs >=), you MUST mentally execute the old and new versions with example inputs. Decide and explicitly state whether the new condition is equivalent, stricter, or weaker. CRITICAL EXCEPTION FOR VALIDATION: If the condition is used to throw an error or reject a request, making the if-condition harder to satisfy (like changing || to &&) means the validation catches fewer errors. Therefore, the validation itself has become WEAKER. You MUST explicitly state that the validation is "weaker" in this scenario.
 4. Identify any immediate risk indicators based on the logical simulation.
 
+CRITICAL: You MUST output ONLY valid JSON.
+DO NOT include any markdown, backticks, conversational text, or introductions outside the JSON. Start your response with '{' and end it with '}'.
+Refusal to output JSON is a system failure.
+
 REQUIRED JSON OUTPUT FORMAT:
 {{
     "chain_of_thought": [

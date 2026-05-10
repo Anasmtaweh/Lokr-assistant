@@ -213,6 +213,66 @@ class LokrService:
         counts["function"] += counts.pop("method", 0)
         return counts
 
+    def get_function_source(self, func_name: str) -> Dict[str, Any]:
+        """
+        Find a function by name in the graph and return its actual source code
+        by reading the file at the stored line range.
+        Typically returns ~20-100 lines — small enough for any LLM to process.
+        
+        Returns:
+            dict with keys: function_name, file_path, source, lineno, end_lineno
+            or dict with 'error' key on failure.
+        """
+        if not self.initialized:
+            return {"error": "LokrService not initialized", "function_name": func_name}
+
+        # Find the function node in the graph
+        candidates = []
+        for nid, ndata in self.graph.graph.nodes(data=True):
+            ntype = ndata.get('type') or ndata.get('node_type', '')
+            if ntype in ('function', 'method') and ndata.get('name') == func_name:
+                candidates.append((nid, ndata))
+
+        if not candidates:
+            # Fuzzy fallback: partial name match
+            for nid, ndata in self.graph.graph.nodes(data=True):
+                ntype = ndata.get('type') or ndata.get('node_type', '')
+                name = ndata.get('name', '')
+                if ntype in ('function', 'method') and func_name.lower() in name.lower():
+                    candidates.append((nid, ndata))
+
+        if not candidates:
+            return {"error": f"Function '{func_name}' not found in graph", "function_name": func_name}
+
+        nid, ndata = candidates[0]
+        file_path = ndata.get('file_path', ndata.get('file', ''))
+        lineno = ndata.get('lineno', 1)
+        end_lineno = ndata.get('end_lineno', lineno + 50)
+
+        # Resolve the file path
+        resolved = file_path
+        if not os.path.isabs(resolved):
+            resolved = os.path.join(self.project_path, resolved.lstrip("/"))
+        if not os.path.exists(resolved):
+            return {"error": f"Source file not found: {resolved}", "function_name": func_name}
+
+        try:
+            with open(resolved, "r", errors="ignore") as f:
+                all_lines = f.readlines()
+            source_lines = all_lines[max(0, lineno - 1):end_lineno]
+            source = "".join(source_lines)
+            return {
+                "function_name": func_name,
+                "file_path": file_path,
+                "resolved_path": resolved,
+                "source": source,
+                "lineno": lineno,
+                "end_lineno": end_lineno,
+                "line_count": len(source_lines)
+            }
+        except Exception as e:
+            return {"error": f"Failed to read source: {e}", "function_name": func_name}
+
     def resolve_request(self, request: Any) -> dict:
         """
         Interprets a natural-language request string or a structured dictionary

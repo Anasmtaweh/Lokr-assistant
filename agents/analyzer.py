@@ -89,8 +89,13 @@ class AnalyzerAgent(BaseAgent):
         # Optionally fetch broad Lokr context upfront (lightweight — top 2 results)
         if self.lokr_service and not skip_lokr:
             try:
-                lokr_context = self.lokr_service.get_relevant_context(code, top_k=2)
+                # Use the user's specific task as the query, rather than the entire code blob
+                search_query = state.get("task", "") or code[:200]
+                lokr_context = self.lokr_service.get_relevant_context(search_query, top_k=2)
                 if lokr_context:
+                    # Truncate the context if it's absurdly large to prevent 400 Bad Request
+                    if len(lokr_context) > 15000:
+                        lokr_context = lokr_context[:15000] + "\n...[Context truncated due to size limitations]..."
                     code += f"\n\n### ADDITIONAL LOKR CONTEXT:\n{lokr_context}"
             except Exception as e:
                 self._log(f"Lokr context fetch failed: {e}", level="WARNING")

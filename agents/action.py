@@ -145,10 +145,16 @@ class ActionAgent(BaseAgent):
                 if hypothesis:
                     user_msg += f"\nROOT CAUSE HYPOTHESIS:\n{hypothesis}\n"
                 if issues_list:
-                    user_msg += f"\nALL ISSUES TO FIX (you MUST address EVERY item):\n"
-                    for i, issue in enumerate(issues_list, 1):
-                        user_msg += f"  {i}. {issue}\n"
-                    user_msg += f"\nTotal issues: {len(issues_list)}. Your patch MUST contain fixes for ALL {len(issues_list)} issues listed above.\n"
+                    if mode == "repair":
+                        user_msg += f"\nALL ISSUES TO FIX (you MUST address EVERY item):\n"
+                        for i, issue in enumerate(issues_list, 1):
+                            user_msg += f"  {i}. {issue}\n"
+                        user_msg += f"\nTotal issues: {len(issues_list)}. Your patch MUST contain fixes for ALL {len(issues_list)} issues listed above.\n"
+                    else:
+                        user_msg += f"\nIDENTIFIED ISSUES (to evaluate):\n"
+                        for i, issue in enumerate(issues_list, 1):
+                            user_msg += f"  {i}. {issue}\n"
+                        user_msg += f"\nTotal issues: {len(issues_list)}.\n"
                 
                 if "original_input" in state:
                     user_msg += f"\nORIGINAL CODE:\n{state['original_input']}\n"

@@ -146,3 +146,4 @@ brain/
 !lokr-demo-app/.lokr/**
 !lokr-demo-app/data/**
 lokr-demo-app/data/vector_store/**
+logs/

@@ -417,7 +417,7 @@ def _prescan_for_backdoors(files_to_analyze: list, lokr_service) -> list:
     return findings
 
 
-def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, user_input: str, llm_client: LLMClient, lokr_service: Optional[LokrService], max_iterations: int = 25, progress_callback: Optional[callable] = None) -> dict:
+def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, user_input: str, llm_client: LLMClient, lokr_service: Optional[LokrService], max_iterations: int = 100, progress_callback: Optional[callable] = None) -> dict:
     """Run a loop-based agent pipeline for repair, review, or prevent."""
     def _notify(msg: str):
         if progress_callback:
@@ -643,6 +643,22 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
     else:
         print(f"[PRESCAN] No findings to inject. Analyzer input unchanged.")
     
+    # --- Feature 1: Naked Route Detection (Generic) ---
+    import re
+    # Look for route definitions that go directly to a handler function without any middleware.
+    # This pattern matches standard REST verb definitions with exactly 2 arguments (path and callback).
+    # It catches routes missing an intermediate auth/user middleware.
+    naked_route_pattern = r'\.(?:get|post|put|delete|patch|options|head)\s*\(\s*[\'"].*?[\'"]\s*,\s*(?:async\s*)?\(?\s*\w+\s*,\s*\w+\s*\)?\s*=>'
+    if re.search(naked_route_pattern, analyzer_structured_input):
+        advisory = (
+            "\n\n### 🛡️ GENERAL SECURITY ADVISORY (Structural Analysis)\n"
+            "Structural analysis indicates that some detected routes lack an intermediate middleware layer. "
+            "These endpoints appear to be PUBLICLY accessible (unauthenticated). "
+            "Account for missing authentication layers in your diagnosis, as the issue may be broader than just missing authorization checks.\n"
+        )
+        analyzer_structured_input += advisory
+        print("[ORCHESTRATOR] Naked routes detected. Injecting Security Advisory.")
+    
     # --- FORENSIC: Log final analyzer input token estimate ---
     est_tokens = len(analyzer_structured_input) // 4
     print(f"[FORENSIC] Analyzer structured input size: {len(analyzer_structured_input)} chars (~{est_tokens} tokens)")
@@ -690,6 +706,58 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                 contribution = analyzer.run(state, llm_client, lokr_service)
             except ValueError as e:
                 print(f"[ORCHESTRATOR][CRITICAL] Analyzer validation failed: {e}")
+                
+                # Lokr Fallback: If LLM returned empty response, it might be due to lack of focused context.
+                # Try to extract the function source directly and retry once.
+                if "empty response" in str(e).lower() and lokr_service and not state.get("analyzer_fallback_triggered"):
+                    print("[ORCHESTRATOR] Empty response detected. Triggering Lokr focused-context fallback...")
+                    _notify("⚠️ Analyzer failed due to missing context. Fetching specific function source via Lokr...")
+                    
+                    # Try to guess the function name from user input
+                    # Simple heuristic: look for words before "function" or camelCase words
+                    import re
+                    words = re.findall(r'\b[a-zA-Z]+\b', user_input)
+                    candidates = []
+                    
+                    # 1. Look for camelCase
+                    for w in words:
+                        if re.match(r'^[a-z]+[A-Z][a-zA-Z]*$', w):
+                            candidates.append(w)
+                    
+                    # 2. Look for phrases like "delete pet function" -> "deletePet"
+                    match = re.search(r'([a-z]+)\s+([a-z]+)\s+function', user_input.lower())
+                    if match:
+                        verb, noun = match.groups()
+                        candidates.append(f"{verb}{noun.capitalize()}")
+                    
+                    # 3. Just use selected functions from triage
+                    if "selected_functions" in locals() and selected_functions:
+                        for sf in selected_functions:
+                            if sf.get("function_name"):
+                                candidates.append(sf.get("function_name"))
+                    
+                    fallback_success = False
+                    for candidate in candidates:
+                        source_data = lokr_service.get_function_source(candidate)
+                        if "error" not in source_data and source_data.get("source"):
+                            # We found it!
+                            source_code = source_data["source"]
+                            file_path = source_data["file_path"]
+                            lines = f"{source_data['lineno']}-{source_data['end_lineno']}"
+                            
+                            fallback_context = f"\n\n### LOKR FALLBACK SOURCE: {candidate} ({file_path}:{lines})\n"
+                            fallback_context += f"```javascript\n{source_code}\n```\n"
+                            fallback_context += "Instruction: Please analyze the explicit source code provided above to diagnose the issue.\n"
+                            
+                            state["analyzer_input"] += fallback_context
+                            state["analyzer_fallback_triggered"] = True
+                            fallback_success = True
+                            print(f"[ORCHESTRATOR] Lokr fallback injected source for '{candidate}'. Retrying Analyzer...")
+                            break
+                    
+                    if fallback_success:
+                        continue # Retry the loop
+                
                 _notify(f"🚨 Analyzer failed: {e}")
                 state["status"] = "failed"
                 state["error"] = f"ANALYZER_VALIDATION_ERROR: {str(e)}"
@@ -813,6 +881,25 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                 if grounding_ratio < 0.5:
                     print(f"[FORENSIC][WARNING] Low grounding ratio ({grounding_ratio*100:.0f}%). Results may contain hallucinations.")
                     _notify(f"⚠️ Only {grounding_ratio*100:.0f}% of findings are grounded in code. Proceeding with caution.")
+                
+                # --- Feature 2: Systemic Audit Trigger (Generic) ---
+                # If we found a grounded flaw in the first pass, instruct the Analyzer to check neighboring files.
+                if iteration == 0 and grounded_count > 0:
+                    source_files = set()
+                    for f_item in findings:
+                        if f_item.get("location", {}).get("file"):
+                            source_files.add(f_item["location"]["file"])
+                    
+                    if source_files:
+                        audit_instruction = (
+                            f"\n\n### SYSTEMIC AUDIT REQUIRED\n"
+                            f"A grounded security flaw pattern has been identified in: {list(source_files)}\n"
+                            f"Instruction: Review the other files in the project for identical or similar structural patterns. "
+                            f"Security vulnerabilities of this nature are often systemic; ensure your diagnosis accounts for all occurrences across the provided context.\n"
+                        )
+                        state["original_input"] += audit_instruction
+                        state["analyzer_input"] += audit_instruction
+                        print(f"[ORCHESTRATOR] Systemic Audit triggered for files: {list(source_files)}")
             # ------------------------------------------------------
 
             if intent == "repair":
@@ -952,7 +1039,7 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                     
                     # Check if middleware-related issues exist but no middleware fix in patch
                     has_middleware_issue = any('middleware' in issue.lower() for issue in issues_list)
-                    has_middleware_patch = any('middleware' in f.lower() for f in patch_file_markers)
+                    has_middleware_patch = any('middleware' in f.lower() for f in patch_file_markers) or 'middleware' in patch_text.lower()
                     
                     if has_middleware_issue and not has_middleware_patch:
                         print(f"[ORCHESTRATOR] Patch completeness check FAILED: Diagnosis mentions middleware issue but patch has no middleware fix. Looping back...")
@@ -980,9 +1067,16 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                         state["analyzer_input"] += completeness_feedback
                         
                         state["needs_revision"] = True
+                        # Discard the bad action and force action revision
+                        state["actions"] = []
+                        state["status"] = "needs_action_revision"
                         iteration += 1
                         continue
             
+            # Action generated successfully and passed all checks.
+            # Reset status to investigating so we can proceed to Safety.
+            state["status"] = "investigating"
+
         # 3. Safety Step
         elif len(state["safety_reports"]) < len(state["actions"]):
             import time

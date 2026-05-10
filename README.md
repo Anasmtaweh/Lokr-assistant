@@ -507,7 +507,19 @@ Patch: Add ownership validation + remove debug header
 
 ### Scenario 4: Logic Regression Review 🔍
 
-**Input:** A diff changing `||` to `&&` in a validation condition.
+**Input:** Paste the following diff into the chat box:
+```diff
+--- a/src/middleware/permission.js
++++ b/src/middleware/permission.js
+@@ -10,7 +10,7 @@ function checkAccess(req, res, next) {
+     const isAdmin = req.user.role === 'admin';
+     const hasPermission = req.user.permissions.includes('write');
+ 
+-    if (!isAdmin || !hasPermission) {
++    if (!isAdmin && !hasPermission) {
+         return res.status(403).json({ error: "Access Denied" });
+     }
+```
 
 **Expected Result:** 
 ```

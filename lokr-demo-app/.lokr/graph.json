@@ -2,7 +2,7 @@
   "directed": true,
   "multigraph": false,
   "graph": {
-    "commit_hash": "71d9f88d1efa6bd69c6ae77507af5c3cdb24f30f"
+    "commit_hash": "b9cce7efe4073041358972fea27cb1727e2820c6"
   },
   "nodes": [
     {
@@ -111,6 +111,7 @@
       "docstring": null,
       "lineno": 7,
       "end_lineno": 15,
+      "usage_count": 3,
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::PetRepository"
     },
     {
@@ -119,11 +120,12 @@
       "source_code": "let petsDb = [\n    { id: '1', name: 'Fido', ownerId: '101' },\n    { id: '2', name: 'Whiskers', ownerId: '102' }\n];",
       "lineno": 2,
       "end_lineno": 5,
+      "usage_count": 3,
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::VAR::petsDb"
     },
     {
       "node_type": "function",
-      "usage_count": 0,
+      "usage_count": 6,
       "name": "deleteById",
       "parent_class": "PetRepository",
       "is_method": true,
@@ -138,10 +140,10 @@
         "filter"
       ],
       "uses": [
-        "petId",
-        "pet",
+        "initialLength",
         "petsDb",
-        "initialLength"
+        "pet",
+        "petId"
       ],
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/repositories/pet.repository.js::PetRepository.deleteById"
     },
@@ -155,7 +157,7 @@
     },
     {
       "node_type": "function",
-      "usage_count": 4,
+      "usage_count": 0,
       "name": "GET::/system-logs",
       "parent_class": null,
       "is_method": false,
@@ -177,7 +179,7 @@
     },
     {
       "node_type": "function",
-      "usage_count": 4,
+      "usage_count": 18,
       "name": "POST::/wipe-database",
       "parent_class": null,
       "is_method": false,
@@ -199,7 +201,7 @@
     },
     {
       "node_type": "function",
-      "usage_count": 0,
+      "usage_count": 12,
       "name": "router.post(/wipe-database)",
       "parent_class": null,
       "is_method": false,
@@ -242,6 +244,7 @@
       "source_code": "const jwt = require('jsonwebtoken');",
       "lineno": 1,
       "end_lineno": 1,
+      "usage_count": 4,
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::VAR::jwt"
     },
     {
@@ -250,11 +253,12 @@
       "source_code": "const JWT_SECRET = \"super-secret-key-123\";",
       "lineno": 5,
       "end_lineno": 5,
+      "usage_count": 4,
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::VAR::JWT_SECRET"
     },
     {
       "node_type": "function",
-      "usage_count": 0,
+      "usage_count": 8,
       "name": "authenticate",
       "parent_class": null,
       "is_method": false,
@@ -268,27 +272,27 @@
       "lineno": 7,
       "end_lineno": 25,
       "calls": [
-        "next",
-        "json",
         "verify",
+        "next",
+        "status",
         "split",
-        "status"
+        "json"
       ],
       "uses": [
-        "next",
-        "decoded",
-        "jwt",
-        "err",
         "res",
-        "token",
+        "next",
+        "err",
         "req",
+        "jwt",
+        "token",
+        "decoded",
         "JWT_SECRET"
       ],
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/middleware/auth.js::authenticate"
     },
     {
       "node_type": "function",
-      "usage_count": 0,
+      "usage_count": 14,
       "name": "requireRole",
       "parent_class": null,
       "is_method": false,
@@ -348,13 +352,13 @@
         "json"
       ],
       "uses": [
-        "result",
-        "petId",
-        "petService",
-        "userId",
         "res",
+        "petService",
+        "petId",
+        "result",
+        "req",
         "error",
-        "req"
+        "userId"
       ],
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/controllers/pet.controller.js::PetController.deletePet"
     },
@@ -364,7 +368,7 @@
       "docstring": null,
       "lineno": 4,
       "end_lineno": 12,
-      "usage_count": 8,
+      "usage_count": 10,
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::PetService"
     },
     {
@@ -373,12 +377,12 @@
       "source_code": "const petRepository = require('../repositories/pet.repository');",
       "lineno": 2,
       "end_lineno": 2,
-      "usage_count": 4,
+      "usage_count": 5,
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::VAR::petRepository"
     },
     {
       "node_type": "function",
-      "usage_count": 8,
+      "usage_count": 10,
       "name": "removePet",
       "parent_class": "PetService",
       "is_method": true,
@@ -394,14 +398,14 @@
         "deleteById"
       ],
       "uses": [
-        "petId",
-        "petRepository"
+        "petRepository",
+        "petId"
       ],
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/services/pet.service.js::PetService.removePet"
     },
     {
       "node_type": "function",
-      "usage_count": 0,
+      "usage_count": 12,
       "name": "calculateCircleArea",
       "parent_class": null,
       "is_method": false,
@@ -414,15 +418,15 @@
       "end_lineno": 12,
       "calls": [],
       "uses": [
-        "Math",
+        "radius",
         "Error",
-        "radius"
+        "Math"
       ],
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/utils/geometry-calculator.js::calculateCircleArea"
     },
     {
       "node_type": "function",
-      "usage_count": 0,
+      "usage_count": 6,
       "name": "calculateHypotenuse",
       "parent_class": null,
       "is_method": false,
@@ -438,9 +442,9 @@
         "sqrt"
       ],
       "uses": [
-        "Math",
         "a",
-        "b"
+        "b",
+        "Math"
       ],
       "id": "/home/anas/Lokr-assistant/lokr-demo-app/src/utils/geometry-calculator.js::calculateHypotenuse"
     }
