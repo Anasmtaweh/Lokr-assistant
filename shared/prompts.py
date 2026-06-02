@@ -356,10 +356,9 @@ Output Format (JSON ONLY):
     "chain_of_thought": [
         "<Step 1 of your reasoning>",
         "<Step 2 of your reasoning>",
-        "<Step 3 of your reasoning>"
-    ]. The EXACT buggy line is: [quote from code]. Fix: [replacement line].",
-        "Checklist verification: My patch contains a diff hunk for all issues.",
-        "I am verifying that the new code matches the expected behavior."
+        "<Step 3 of your reasoning: The EXACT buggy line is: [quote from code]. Fix: [replacement line].>",
+        "<Checklist verification: My patch contains a diff hunk for all issues.>",
+        "<Final verification: The new code matches the expected behavior.>"
     ],
     "contribution": {{
         "action_type": "{mode}",

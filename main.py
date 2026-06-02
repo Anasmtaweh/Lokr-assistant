@@ -1,21 +1,20 @@
 """
 Lokr Assistant CLI Entrypoint.
 
-This script provides a command-line interface to interact with the Lokr Assistant's
-different modes: repair, review, and prevent.
+This script provides a command-line interface to interact with the Lokr Assistant
+using the main run_assistant() orchestrator entry point.
 """
 
 import argparse
 import sys
 import json
+from typing import Optional
 
-from modes.repair.runner import run_repair
-from modes.review.runner import run_review
-from modes.prevent.runner import run_prevent
+from modes.orchestrator import run_assistant
 
 def main():
     """
-    Parse command-line arguments and route to the appropriate pipeline mode.
+    Parse command-line arguments and route to the orchestrator assistant.
     """
     parser = argparse.ArgumentParser(
         description="Lokr Assistant CLI. Run in repair, review, or prevent mode."
@@ -30,42 +29,88 @@ def main():
     parser.add_argument(
         "-c", "--code",
         type=str,
-        help="The code string to analyze (required for 'repair' and 'prevent' modes)."
+        help="The code string to analyze (used for 'repair' and 'prevent' modes)."
     )
     
     parser.add_argument(
         "-d", "--diff",
         type=str,
-        help="The code diff string to review (required for 'review' mode)."
+        help="The code diff string to review (used for 'review' mode)."
+    )
+    
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="qwen2.5-coder:7b",
+        help="The name of the LLM model to use (default: 'qwen2.5-coder:7b')."
+    )
+    
+    parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:11434",
+        help="The base URL of the LLM API (default: 'http://localhost:11434')."
+    )
+    
+    parser.add_argument(
+        "--api-key",
+        type=str,
+        default=None,
+        help="API key for OpenAI-compatible endpoints."
+    )
+
+    parser.add_argument(
+        "--api-type",
+        type=str,
+        default="ollama",
+        choices=["ollama", "openai"],
+        help="The API provider type: 'ollama' or 'openai' (default: 'ollama')."
+    )
+
+    parser.add_argument(
+        "--project",
+        type=str,
+        default=None,
+        help="Path to the project directory to analyze."
     )
 
     args = parser.parse_args()
 
-    # Validate inputs based on mode
-    if args.mode == "review":
+    # Validate inputs based on mode and construct user_input
+    if args.mode == "repair":
+        if not args.code:
+            print("Error: The '--code' or '-c' argument is required for 'repair' mode.")
+            sys.exit(1)
+        user_input = f"Repair this code:\n{args.code}"
+    elif args.mode == "review":
         if not args.diff:
             print("Error: The '--diff' or '-d' argument is required for 'review' mode.")
             sys.exit(1)
-        input_data = args.diff
-    else:
-        # For repair and prevent
-        if not args.code:
-            print(f"Error: The '--code' or '-c' argument is required for '{args.mode}' mode.")
-            sys.exit(1)
-        input_data = args.code
-
-    config = {}
-
-    # Execute the appropriate pipeline
-    if args.mode == "repair":
-        result = run_repair(input_data, config)
-    elif args.mode == "review":
-        result = run_review(input_data, config)
+        user_input = f"Review this diff:\n{args.diff}"
     elif args.mode == "prevent":
-        result = run_prevent(input_data, config)
-        
-    print("\nFinal Result:")
-    print(json.dumps(result, indent=2))
+        input_data = args.code or args.diff
+        if not input_data:
+            print("Error: Either '--code'/' -c' or '--diff'/' -d' is required for 'prevent' mode.")
+            sys.exit(1)
+        user_input = f"Check if this change is safe to deploy:\n{input_data}"
+
+    # Call run_assistant from modes.orchestrator
+    try:
+        result = run_assistant(
+            user_input=user_input,
+            project_path=args.project,
+            model=args.model,
+            use_lokr=bool(args.project),
+            progress_callback=print,
+            api_type=args.api_type,
+            base_url=args.api_url,
+            api_key=args.api_key
+        )
+        print("\nFinal Result:")
+        print(json.dumps(result, indent=2))
+    except Exception as e:
+        print(f"Error executing assistant: {e}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

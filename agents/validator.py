@@ -112,10 +112,25 @@ class ValidatorAgent(BaseAgent):
 
             # Normalize: wrap flat responses into contribution structure
             if "contribution" not in parsed:
-                parsed["contribution"] = {
-                    "status": parsed.pop("status", "success" if parsed.get("safe", True) else "failure"),
-                    "feedback": parsed.pop("feedback", parsed.get("response", parsed.get("summary", "Validation completed.")))
-                }
+                if mode == "review":
+                    parsed["contribution"] = {
+                        "review_checklist": parsed.pop("review_checklist", []),
+                        "verification_steps": parsed.pop("verification_steps", []),
+                        "status": parsed.pop("status", "success")
+                    }
+                elif mode == "prevent":
+                    parsed["contribution"] = {
+                        "pre_deploy_checklist": parsed.pop("pre_deploy_checklist", []),
+                        "post_deploy_checklist": parsed.pop("post_deploy_checklist", []),
+                        "rollback_steps": parsed.pop("rollback_steps", ""),
+                        "status": parsed.pop("status", "success"),
+                        "feedback": parsed.pop("feedback", parsed.get("response", parsed.get("summary", "Validation completed.")))
+                    }
+                else:
+                    parsed["contribution"] = {
+                        "status": parsed.pop("status", "success" if parsed.get("safe", True) else "failure"),
+                        "feedback": parsed.pop("feedback", parsed.get("response", parsed.get("summary", "Validation completed.")))
+                    }
             if "chain_of_thought" not in parsed:
                 parsed["chain_of_thought"] = []
             if "lokr_requests" not in parsed:

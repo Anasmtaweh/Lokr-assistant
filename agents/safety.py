@@ -144,12 +144,29 @@ class SafetyAgent(BaseAgent):
 
             # Normalize: wrap flat responses into contribution structure
             if "contribution" not in parsed:
-                parsed["contribution"] = {
-                    "safe": parsed.pop("safe", True),
-                    "risk_score": parsed.pop("risk_score", 0.0),
-                    "warnings": parsed.pop("warnings", []),
-                    "reasoning": parsed.pop("reasoning", "")
-                }
+                if mode == "review":
+                    parsed["contribution"] = {
+                        "security_issues": parsed.pop("security_issues", []),
+                        "performance_concerns": parsed.pop("performance_concerns", []),
+                        "deployment_risk": parsed.pop("deployment_risk", "Low"),
+                        "approval": parsed.pop("approval", "APPROVE"),
+                        "rollback_plan": parsed.pop("rollback_plan", "")
+                    }
+                elif mode == "prevent":
+                    parsed["contribution"] = {
+                        "deployment_risk": parsed.pop("deployment_risk", "low"),
+                        "estimated_rollback_time": parsed.pop("estimated_rollback_time", ""),
+                        "health_checks": parsed.pop("health_checks", []),
+                        "go_no_go": parsed.pop("go_no_go", "PROCEED_WITH_CAUTION"),
+                        "reasoning": parsed.pop("reasoning", "")
+                    }
+                else:
+                    parsed["contribution"] = {
+                        "safe": parsed.pop("safe", True),
+                        "risk_score": parsed.pop("risk_score", 0.0),
+                        "warnings": parsed.pop("warnings", []),
+                        "reasoning": parsed.pop("reasoning", "")
+                    }
             else:
                 if "reasoning" not in parsed["contribution"]:
                     parsed["contribution"]["reasoning"] = parsed.get("reasoning", "")

@@ -188,12 +188,25 @@ class ActionAgent(BaseAgent):
 
             # Normalize: wrap flat responses into contribution structure
             if "contribution" not in parsed:
-                parsed["contribution"] = {
-                    "action_type": parsed.pop("action_type", mode),
-                    "patch": parsed.pop("patch", ""),
-                    "review_comments": parsed.pop("review_comments", []),
-                    "deployment_checks": parsed.pop("deployment_checks", [])
-                }
+                if mode == "review":
+                    parsed["contribution"] = {
+                        "observations": parsed.pop("observations", []),
+                        "recommendations": parsed.pop("recommendations", []),
+                        "suggestion_priority": parsed.pop("suggestion_priority", "Medium")
+                    }
+                elif mode == "prevent":
+                    parsed["contribution"] = {
+                        "blockers": parsed.pop("blockers", []),
+                        "warnings": parsed.pop("warnings", []),
+                        "recommendations": parsed.pop("recommendations", [])
+                    }
+                else:
+                    parsed["contribution"] = {
+                        "action_type": parsed.pop("action_type", mode),
+                        "patch": parsed.pop("patch", ""),
+                        "review_comments": parsed.pop("review_comments", []),
+                        "deployment_checks": parsed.pop("deployment_checks", [])
+                    }
             if "chain_of_thought" not in parsed:
                 parsed["chain_of_thought"] = []
             if "lokr_requests" not in parsed:

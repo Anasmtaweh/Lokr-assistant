@@ -179,10 +179,7 @@ Lokr-assistant/
 │   └── validator.py                # Fix validation & deploy checklists
 │
 ├── modes/
-│   ├── orchestrator.py             # Intent classification, agent loop, pre-scan, forensics
-│   ├── repair/runner.py            # Repair pipeline
-│   ├── review/runner.py            # Review pipeline
-│   └── prevent/runner.py           # Deployment readiness pipeline
+│   └── orchestrator.py             # Single entry point for intent classification, agent loop, pre-scan, and forensics
 │
 ├── lokr/
 │   ├── client.py                   # HTTP client for Lokr
@@ -195,6 +192,8 @@ Lokr-assistant/
 ```
 
 ### Agent Pipeline Flow
+
+The orchestrator (`modes/orchestrator.py`) is the single pipeline entry point for both the Streamlit app and the CLI. All requests follow a unified code path for intent classification and agent execution.
 
 ```
 User Request
@@ -725,13 +724,16 @@ The UI will:
 
 ```bash
 # Repair mode
-python main.py repair -c "def add(a,b): return a+b"
+python main.py repair -c "your code" --model <model> --api-url <url>
 
 # Review mode
-python main.py review -d "diff --git a/file.py b/file.py"
+python main.py review -d "your diff" --model <model> --api-url <url>
 
-# Prevent mode (via UI recommended for full experience)
+# Prevent mode
+python main.py prevent -c "your code" --model <model> --api-url <url>
 ```
+
+> **Note:** Add `--api-key` for remote APIs and `--project /path/to/project` to enable Lokr Graph-RAG context.
 
 ---
 

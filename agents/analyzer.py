@@ -120,13 +120,33 @@ class AnalyzerAgent(BaseAgent):
 
             # Normalize: wrap flat responses into contribution structure
             if "contribution" not in parsed:
-                parsed["contribution"] = {
-                    "diagnosis": parsed.pop("diagnosis", "Unknown diagnosis"),
-                    "issues": parsed.pop("issues", []),
-                    "confidence": parsed.pop("confidence", 0.5),
-                    "hypothesis": parsed.pop("hypothesis", "Unknown root cause"),
-                    "evidence_used": parsed.pop("evidence_used", [])
-                }
+                if mode == "review":
+                    parsed["contribution"] = {
+                        "changes_summary": parsed.pop("changes_summary", ""),
+                        "files_affected": parsed.pop("files_affected", []),
+                        "change_type": parsed.pop("change_type", ""),
+                        "functions_modified": parsed.pop("functions_modified", []),
+                        "risk_indicators": parsed.pop("risk_indicators", [])
+                    }
+                elif mode == "prevent":
+                    parsed["contribution"] = {
+                        "commits_since_deploy": parsed.pop("commits_since_deploy", None),
+                        "files_changed": parsed.pop("files_changed", []),
+                        "findings": parsed.pop("findings", []),
+                        "execution_trace": parsed.pop("execution_trace", ""),
+                        "readiness_score": parsed.pop("readiness_score", 0.5),
+                        "change_summary": parsed.pop("change_summary", "")
+                    }
+                else:
+                    parsed["contribution"] = {
+                        "diagnosis": parsed.pop("diagnosis", "Unknown diagnosis"),
+                        "issues": parsed.pop("issues", []),
+                        "findings": parsed.pop("findings", []),
+                        "execution_trace": parsed.pop("execution_trace", ""),
+                        "confidence": parsed.pop("confidence", 0.5),
+                        "hypothesis": parsed.pop("hypothesis", "Unknown root cause"),
+                        "evidence_used": parsed.pop("evidence_used", [])
+                    }
             if "chain_of_thought" not in parsed:
                 parsed["chain_of_thought"] = []
             if "lokr_requests" not in parsed:
