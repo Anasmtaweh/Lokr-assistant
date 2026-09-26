@@ -145,20 +145,22 @@ Lokr Assistant uses **agentic context discovery** instead of context bombing:
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Evidence Grounding Quality
+### Evidence Grounding Quality & Fail-Closed Guarantee
 
-| Evidence Type | Old Matching | New Matching | Result |
-|---|---|---|---|
-| Code with abbreviations (`...`) | ❌ False negative | ✅ Token-based match | GROUNDED |
-| Comment-only evidence | ✅ False positive | ❌ Correctly rejected | UNGROUNDED |
-| Partial code quotes | ❌ Substring fail | ✅ First/last tokens match | GROUNDED |
+Lokr Assistant enforces a **Fail-Closed Evidence Grounding System** to eliminate silent drops and hallucinations:
 
-**Forensic Output Example:**
-```
-[FORENSIC] ✓ GROUNDED: Hardcoded debug header bypasses authentication
-[FORENSIC] ✓ GROUNDED: Missing ownership check before deleting pet
-[FORENSIC] ✗ UNGROUNDED: Cache not invalidated (mentioned in comment only)
-[FORENSIC] Evidence Verification: 2/3 findings grounded (67%) ✓ PASS
+- **Verbatim Snippet Anchors**: Every finding requires a `quoted_code` field matching real code from retrieved files.
+- **Auto-Fetch Recovery**: If a finding fails grounding due to missing source code, the pipeline automatically fetches full source via Lokr and retries (capped at 2 retries).
+- **Zero Silent Drops**: Findings that remain unverified after retries are **retained** in output marked explicitly as `"grounded": false`.
+- **Structured Grounding Reports**: Every run returns explicit grounding summary metrics:
+
+```json
+"grounding": {
+  "analysis_ratio": 1.0,
+  "analysis_grounded": true,
+  "patch_grounded": true,
+  "report": "1 findings raised, 1 grounded, 0 unverified"
+}
 ```
 
 ---
@@ -171,6 +173,7 @@ Lokr Assistant uses **agentic context discovery** instead of context bombing:
 Lokr-assistant/
 ├── app.py                          # Streamlit UI with live agent progress
 ├── main.py                         # CLI entry point
+├── assistant_mcp_server.py        # Model Context Protocol (MCP) server interface
 │
 ├── agents/                         # Individual agent implementations
 │   ├── analyzer.py                 # Diagnosis & readiness assessment
@@ -332,18 +335,13 @@ Safety rejects (with suggestions) → Action revises → Safety re-checks
 - Falls back to Analyzer if no suggestions provided
 - Escapes to full restart if needed
 
-### 3. Deterministic Pre-Scan
+### 3. Deterministic Pre-Scan & Same-Class Endpoint Sweeping
 
-**Problem:** LLMs sometimes miss critical security issues.
+**Problem:** LLMs sometimes miss critical security issues or stop after finding a single buggy endpoint.
 
-**Solution:** Regex-based scanner catches CAT-0 patterns before LLM runs—impossible to hallucinate away.
-
-**Patterns caught:**
-- 🔴 `X-Debug: true` headers in middleware (instant auth bypass)
-- 🔴 `req.user = {role: 'admin'}` hardcoded assignments
-- 🔴 Removed authentication middleware
-- 🔴 Logic inversions (`||` → `&&` in validation)
-- 🔴 Required DB fields without migrations
+**Solution:** Combining regex-based pre-scanning for CAT-0 patterns with prompt-enforced **Same-Class Endpoint Sweeping**:
+- **Deterministic Pre-Scan**: Scans for `X-Debug: true` headers, hardcoded role overrides, and removed middleware before the LLM runs.
+- **Same-Class Sweep Rule**: When a vulnerability pattern (e.g. missing auth check) is identified in one handler, the Analyzer automatically sweeps every handler in the file (`GET`, `PUT`, `POST`, `DELETE`) for the same pattern and reports each as a distinct finding.
 
 **Output:** Mandatory findings injected into Analyzer context:
 ```
@@ -376,19 +374,15 @@ state["status"] = "failed"
 state["error"] = "ANALYZER_VALIDATION_ERROR: Missing required field: contribution"
 ```
 
-### 5. Token-Based Evidence Grounding
+### 5. Fail-Closed Evidence Grounding & Auto-Fetch Recovery
 
-**Problem:** Substring matching fails when LLMs abbreviate code with `...`.
+**Problem:** Standard LLMs hallucinate code evidence or silently drop unverified findings.
 
-**Solution:** Token-based matching handles abbreviations gracefully.
-
-```
-Evidence: "const userId = req.params.userId; // ..."
-Old: Exact substring → NOT FOUND ❌
-New: First 3 + last 3 tokens → FOUND ✅
-```
-
-Logs grounding ratio; warns if <50% of findings are grounded.
+**Solution:** Grounding is strictly enforced against retrieved source code:
+- **Verbatim `quoted_code` Verification**: `is_finding_grounded` verifies quoted snippets against retrieved file contents (fail-closed: empty quotes return `False`).
+- **Auto-Fetch Recovery**: If grounding fails, Lokr automatically pulls full source into state and retries analysis (capped at 2 retries).
+- **Explicit Marking**: Findings that fail grounding are retained and tagged with `grounded: false` instead of being dropped silently.
+- **Action Context Synchronization**: Auto-fetched source code context is synchronized directly into the Action Agent's input.
 
 ---
 
@@ -734,6 +728,16 @@ python main.py prevent -c "your code" --model <model> --api-url <url>
 ```
 
 > **Note:** Add `--api-key` for remote APIs and `--project /path/to/project` to enable Lokr Graph-RAG context.
+
+### Run as MCP Server (Model Context Protocol)
+
+You can also run Lokr Assistant as an MCP server to integrate directly with IDEs and AI agent tools:
+
+```bash
+python assistant_mcp_server.py
+```
+
+Exposes `run_repair`, `run_review`, `run_prevent`, and `check_task` tools over MCP stdio transport.
 
 ---
 
