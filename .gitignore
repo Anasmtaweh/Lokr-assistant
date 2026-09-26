@@ -147,3 +147,4 @@ brain/
 !lokr-demo-app/data/**
 lokr-demo-app/data/vector_store/**
 logs/
+CV_PROJECT_DETAILS.md

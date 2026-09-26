@@ -63,6 +63,7 @@ Output Format (JSON ONLY):
                 "file": "...",
                 "line": "...",
                 "evidence": "...",
+                "quoted_code": "<EXACT literal line(s) of real code from the provided snippets that anchors this finding>",
                 "impact": "..."
             }}
         ],
@@ -174,6 +175,7 @@ STRICT GRAPH-WALKING RULES:
 - **RED-TEAM CHALLENGE (CRITICAL)**: Before finalizing your diagnosis, you MUST play the role of a malicious attacker. Look for:
   - **Backdoors/Bypasses**: Code that allows bypassing security (e.g., debug headers like `x-sentinel-debug`, hardcoded admin keys, or `if (process.env.NODE_ENV === 'test')` bypasses). A hardcoded debug header or secret token that bypasses authentication is a Critical security backdoor. You must always flag it as the highest-priority issue, regardless of the user's stated problem.
   - **Shadow Logic**: Logic that seems to exist only for debugging but could be exploited.
+- **SAME-CLASS SWEEP RULE (CRITICAL)**: Once you identify a vulnerability pattern in one handler/route/function (e.g., missing auth check on DELETE /:id), you MUST scan EVERY other handler/route/function in the SAME FILE for the identical vulnerability class. If GET /:id, PUT /:id, and DELETE /:id all lack an ownership check, each one MUST be a separate finding. Do not stop at the handler the user mentioned — report every instance of the same vulnerability pattern across all handlers in the provided code.
 - **CROSS-FILE CONSISTENCY**: If the bug involves a route and a middleware, you MUST compare their logic. If the middleware requires one role (e.g., 'user') and the route requires another (e.g., 'admin'), flag this "Logic Deadlock" as a critical bug.
 - **MIDDLEWARE ROLE-GATE AUDIT (CRITICAL)**: When analyzing a middleware that gates routes with a role check (e.g., `if (decoded.role !== 'user')`), you MUST:
   1. List ALL roles the middleware ALLOWS through (e.g., only 'user').
@@ -182,8 +184,14 @@ STRICT GRAPH-WALKING RULES:
   4. This is DIFFERENT from the backdoor issue and the ownership issue — it MUST be its own entry in the 'issues' array.
 - **CRITICAL BACKDOOR DETECTION**: Any hardcoded header, query parameter, or secret token that bypasses authentication and sets a user role (especially to 'admin') is a Critical security backdoor. You MUST flag it as a separate finding with severity CRITICAL, regardless of any other issues you find. Include the exact line and file where the bypass occurs.
 
+EVIDENCE ANCHOR RULES (CRITICAL):
+- Each finding MUST include a `quoted_code` field containing a literal, character-for-character quote of REAL CODE that is PRESENT in the provided snippets.
+- This is NOT necessarily "the buggy line" — many bugs are about MISSING code (e.g., a missing ownership check). In that case, quote the real, present code that demonstrates the problem exists (e.g., the route handler that lacks an auth check, the function body that should call validation but doesn't).
+- The quote MUST exist verbatim in the code snippets above. If you cannot find real code to anchor a finding, do not include that finding.
+- The `evidence` field remains for your human-readable explanation of the bug. Only `quoted_code` is machine-validated.
+
 Your diagnosis MUST include:
-1. The exact line(s) of code causing the problem.
+1. The exact line(s) of code causing the problem (quoted in `quoted_code`).
 2. Why it is a bug (and if it is a security backdoor).
 3. The consequences (as described by the user).
 
@@ -208,6 +216,7 @@ REQUIRED JSON OUTPUT FORMAT:
                 "file": "...",
                 "line": "...",
                 "evidence": "...",
+                "quoted_code": "<EXACT literal line(s) of real code from the provided snippets that anchors this finding>",
                 "impact": "..."
             }}
         ],

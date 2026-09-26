@@ -121,6 +121,8 @@ class ActionAgent(BaseAgent):
                 
                 if "original_input" in state:
                     user_msg += f"\nORIGINAL CODE:\n{state['original_input']}\n"
+                if "analyzer_input" in state and state["analyzer_input"]:
+                    user_msg += f"\nRETRIEVED SOURCE CODE CONTEXT:\n{state['analyzer_input']}\n"
             else:
                 # NORMAL PATH: Full patch generation from diagnosis
                 diagnosis = ""
@@ -158,6 +160,8 @@ class ActionAgent(BaseAgent):
                 
                 if "original_input" in state:
                     user_msg += f"\nORIGINAL CODE:\n{state['original_input']}\n"
+                if "analyzer_input" in state and state["analyzer_input"]:
+                    user_msg += f"\nRETRIEVED SOURCE CODE CONTEXT:\n{state['analyzer_input']}\n"
                     
                 # Include safety warnings if re-running (old-style needs_revision)
                 if state.get("needs_revision") and state.get("safety_reports"):

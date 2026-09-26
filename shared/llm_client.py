@@ -54,7 +54,8 @@ class LLMClient:
                 "model": self.model,
                 "messages": messages,
                 "temperature": temperature,
-                "max_tokens": 4096
+                "max_tokens": 16384,
+                "reasoning_effort": "low"
             }
         else:
             url = f"{self.base_url}/api/chat"
@@ -126,6 +127,10 @@ class LLMClient:
                 else:
                     content = data.get("message", {}).get("content", "")
                 
+                if not content:
+                    import sys
+                    print(f"LLMClient warning: Empty content. Response Data: {data}", file=sys.stderr)
+
                 # Handle DeepSeek/Reasoning models by stripping <think> tags
                 if "<think>" in content and "</think>" in content:
                     import re
@@ -135,8 +140,12 @@ class LLMClient:
                     
                 return content
             except requests.exceptions.RequestException as e:
+                import sys
+                print(f"LLMClient exception: {e}", file=sys.stderr)
+                if hasattr(e, 'response') and e.response is not None:
+                    print(f"LLMClient error response: {e.response.text}", file=sys.stderr)
                 if attempt == 2:
-                    print(f"Error communicating with LLM API after 3 attempts: {e}")
+                    print(f"Error communicating with LLM API after 3 attempts: {e}", file=sys.stderr)
                     return ""
                 time.sleep(1 + attempt)  # simple backoff
 

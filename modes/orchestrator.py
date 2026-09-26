@@ -6,8 +6,88 @@ from shared.llm_client import LLMClient
 from lokr.service import LokrService
 from agents.analyzer import AnalyzerAgent
 from agents.action import ActionAgent
+import re
 from agents.safety import SafetyAgent
 from agents.validator import ValidatorAgent
+
+def is_finding_grounded(finding, context_text, verified_files=None):
+    """
+    Validate that an Analyzer finding is grounded in real source code.
+    
+    Two-pass check:
+    1. File existence: does the cited file appear in verified_files or the context?
+    2. Anchor quote: does the quoted_code exist as a literal substring in context_text?
+    
+    Returns True ONLY if the anchor quote is found verbatim in the context.
+    Returns False for missing/empty/trivial quoted_code (fail-closed).
+    """
+    if not finding or not context_text:
+        return False
+    
+    # Pass 1: File existence check (cheap filter)
+    file_path = finding.get("file", "")
+    if file_path and verified_files:
+        file_known = any(file_path in f for f in verified_files) or file_path in context_text
+        if not file_known:
+            return False
+    
+    # Pass 2: Literal anchor quote check
+    quoted_code = finding.get("quoted_code", "")
+    if not quoted_code or not quoted_code.strip():
+        return False  # No quote = not grounded
+    
+    # Special marker: the Analyzer explicitly flagged it as unverifiable
+    if quoted_code.strip() == "UNVERIFIED_IN_CONTEXT":
+        return False
+    
+    # Normalize whitespace for comparison (same approach as is_patch_grounded)
+    clean_context = re.sub(r'\s+', ' ', context_text)
+    clean_quote = re.sub(r'\s+', ' ', quoted_code.strip())
+    
+    # Require a meaningful quote (not just a bracket or semicolon)
+    if len(clean_quote) <= 5:
+        return False  # Too short to meaningfully validate
+    
+    return clean_quote in clean_context
+
+def is_patch_grounded(patch_text, context_text):
+    if not patch_text or not context_text:
+        return True
+    
+    lines = patch_text.split('\n')
+    context_blocks = []
+    current_block = []
+    for line in lines:
+        if line.startswith('@@'):
+            if current_block:
+                context_blocks.append('\n'.join(current_block))
+                current_block = []
+        elif (line.startswith(' ') or line.startswith('-')) and not line.startswith('--- '):
+            current_block.append(line[1:])
+        elif line.startswith('+') or line.startswith('+++'):
+            if current_block:
+                context_blocks.append('\n'.join(current_block))
+                current_block = []
+                
+    if current_block:
+        context_blocks.append('\n'.join(current_block))
+        
+    for block in context_blocks:
+        if not block.strip():
+            continue
+        # Inline grounding check: verify first and last meaningful tokens exist in context
+        tokens = [t for t in (line.strip().split('//')[0].replace('...', '').strip() 
+                  for line in block.split('\n') if line.strip() and line.strip() != '...' and not line.strip().startswith('//'))
+                  if t and len(t) > 3]
+        if not tokens:
+            continue
+        clean_context = re.sub(r'\s+', ' ', context_text)
+        first_match = re.sub(r'\s+', ' ', tokens[0]) in clean_context
+        last_match = re.sub(r'\s+', ' ', tokens[-1]) in clean_context
+        if not (first_match and last_match):
+            return False
+            
+    return True
 
 def _extract_json_from_text(text: str) -> dict:
     """Helper to extract json from classification response."""
@@ -696,6 +776,8 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
     
     iteration = 0
     while state["status"] in ["investigating", "needs_new_action", "needs_action_revision"] and iteration < max_iterations:
+        import time, sys
+        print(f"[TIMING] ---> START Loop Tick {iteration} <---", file=sys.stderr)
         contribution = None
              # 1. Analyzer Step
         if len(state["hypotheses"]) == 0:
@@ -703,7 +785,11 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             time.sleep(0.8) # Demo delay
             _notify("🔍 Analyzer is investigating the code context and building a hypothesis...")
             try:
+                import time, sys
+                _t0_analyzer = time.time()
+                print(f"[TIMING] Analyzer RUN start", file=sys.stderr)
                 contribution = analyzer.run(state, llm_client, lokr_service)
+                print(f"[TIMING] Analyzer RUN end: {time.time() - _t0_analyzer:.2f}s", file=sys.stderr)
             except ValueError as e:
                 print(f"[ORCHESTRATOR][CRITICAL] Analyzer validation failed: {e}")
                 
@@ -826,76 +912,113 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             # HARD FAIL EMPTY ANALYSIS
             findings = contrib.get("findings", [])
             
-            # --- FORENSIC INSTRUMENTATION: EVIDENCE PRESERVATION VERIFICATION ---
-            import re
-            
-            def _is_evidence_grounded(evidence_text, context_text):
-                """
-                Token-based evidence grounding. Handles LLM abbreviations like '...'
-                by checking if key code tokens from the evidence appear in the context.
-                """
-                if not evidence_text or not context_text:
-                    return True  # Nothing to verify
-                
-                lines = evidence_text.split('\n')
-                code_tokens = []
-                for line in lines:
-                    stripped = line.strip()
-                    if not stripped or stripped == '...' or stripped.startswith('//'):
-                        continue
-                    # Remove inline comments and ellipsis
-                    code_part = stripped.split('//')[0].strip()
-                    code_part = code_part.replace('...', '').strip()
-                    if code_part and len(code_part) > 3:
-                        code_tokens.append(code_part)
-                
-                if not code_tokens:
-                    return True  # No substantive code to verify
-                
-                # Normalize context for matching
-                clean_context = re.sub(r'\s+', ' ', context_text)
-                
-                # Check: first meaningful token AND last meaningful token must appear
-                first_token = re.sub(r'\s+', ' ', code_tokens[0])
-                last_token = re.sub(r'\s+', ' ', code_tokens[-1])
-                
-                first_match = first_token in clean_context
-                last_match = last_token in clean_context
-                
-                return first_match and last_match
-            
             hallucinated_evidence_count = 0
+            ungrounded_findings = []
+            context_text = state.get("original_input", "") + state.get("analyzer_input", "")
+            verified_files = state.get("selected_files", [])
             for f_item in findings:
-                ev = f_item.get("evidence", "")
-                grounded = _is_evidence_grounded(ev, state.get("original_input", "") + state.get("analyzer_input", ""))
+                grounded = is_finding_grounded(f_item, context_text, verified_files)
+                f_item["grounded"] = grounded  # Explicitly flag the finding
                 status_icon = "✓ GROUNDED" if grounded else "✗ UNGROUNDED"
+                quoted = f_item.get("quoted_code", "<missing>")[:60]
                 print(f"  [FORENSIC] {status_icon}: {f_item.get('issue', f_item.get('description', ''))[:80]}")
+                print(f"             quoted_code: {quoted}...")
                 if not grounded:
                     hallucinated_evidence_count += 1
+                    ungrounded_findings.append(f_item.get("issue", f_item.get("description", "unknown")))
             
             if findings:
                 grounded_count = len(findings) - hallucinated_evidence_count
                 grounding_ratio = grounded_count / len(findings)
+                state["grounding_ratio"] = grounding_ratio
+                state["findings_total"] = len(findings)
+                state["findings_grounded"] = grounded_count
+                state["findings_unverified"] = hallucinated_evidence_count
+                
                 print(f"[FORENSIC] Evidence Verification: {grounded_count}/{len(findings)} findings grounded ({grounding_ratio*100:.0f}%)")
                 
-                if grounding_ratio < 0.5:
-                    print(f"[FORENSIC][WARNING] Low grounding ratio ({grounding_ratio*100:.0f}%). Results may contain hallucinations.")
-                    _notify(f"⚠️ Only {grounding_ratio*100:.0f}% of findings are grounded in code. Proceeding with caution.")
+                # Enforcement: block and force revision if any findings are ungrounded
+                analysis_grounding_retries = state.get("_analysis_grounding_retries", 0)
+                if grounding_ratio < 1.0 and analysis_grounding_retries < 2:
+                    # --- Auto-fetch full source for ungrounded findings' files ---
+                    ungrounded_files = set()
+                    for f_item in findings:
+                        if not f_item.get("grounded") and f_item.get("file"):
+                            ungrounded_files.add(f_item["file"])
+                    
+                    fetched_source = ""
+                    if ungrounded_files and lokr_service:
+                        import os
+                        existing_context = state.get("analyzer_input", "") + state.get("original_input", "")
+                        for uf in ungrounded_files:
+                            # Skip if this file's source was already injected on a prior retry
+                            source_header = f"### FULL SOURCE CODE: {uf}"
+                            if source_header in existing_context:
+                                print(f"[FORENSIC] Source already injected for {uf}, skipping duplicate.")
+                                continue
+                            full_path = os.path.join(lokr_service.project_path, uf.lstrip("/"))
+                            if os.path.exists(full_path):
+                                try:
+                                    with open(full_path, "r", encoding="utf-8") as f:
+                                        src = f.read()
+                                    fetched_source += f"\n\n### FULL SOURCE CODE: {uf}\n```\n{src}\n```\n"
+                                    # Sync with selected_files so Action agent also gets this file
+                                    if uf not in state.get("selected_files", []):
+                                        state["selected_files"].append(uf)
+                                    print(f"[FORENSIC] Auto-fetched full source for ungrounded file: {uf} ({len(src)} chars)")
+                                except Exception as e:
+                                    print(f"[FORENSIC] Failed to read {full_path}: {e}")
+                            else:
+                                print(f"[FORENSIC] File not found for auto-fetch: {full_path}")
+                    
+                    print(f"[FORENSIC][ENFORCEMENT] Ungrounded findings detected. Forcing Analyzer revision (attempt {analysis_grounding_retries + 1}/2).")
+                    _notify(f"⚠️ {hallucinated_evidence_count} ungrounded finding(s). Auto-fetching source and retrying.")
+                    ungrounded_list = "; ".join(ungrounded_findings[:5])
+                    grounding_feedback = (
+                        f"\n\n### ANALYSIS GROUNDING FAILURE\n"
+                        f"Your findings failed grounding verification. {hallucinated_evidence_count}/{len(findings)} findings "
+                        f"have `quoted_code` that does NOT exist in the provided source code.\n"
+                        f"Ungrounded findings: {ungrounded_list}\n\n"
+                        f"You MUST revise your findings to include valid `quoted_code` for each. "
+                        f"The FULL SOURCE CODE for the relevant files has been injected below — use it to find real anchor quotes.\n"
+                        f"CRITICAL RULE: DO NOT delete these findings from your output just because they failed grounding! "
+                        f"If you genuinely cannot find the literal code to anchor a finding even with the full source, "
+                        f"you MUST keep the finding in the JSON but set its `quoted_code` exactly to `UNVERIFIED_IN_CONTEXT`.\n"
+                    )
+                    # Remove previous grounding feedback to avoid stacking
+                    state["analyzer_input"] = re.sub(r'\n\n### ANALYSIS GROUNDING FAILURE\n.*?(?=\n\n### |$)', '', state["analyzer_input"], flags=re.DOTALL)
+                    state["analyzer_input"] += grounding_feedback + fetched_source
+                    state["original_input"] += fetched_source  # Also inject into original_input for context checks
+                    state["hypotheses"] = []
+                    state["_analysis_grounding_retries"] = analysis_grounding_retries + 1
+                    iteration += 1
+                    continue
+                elif grounding_ratio < 1.0:
+                    # Cap hit: retries exhausted but still ungrounded findings.
+                    # Findings remain in output with grounded=false flag (set in the loop above).
+                    print(f"[FORENSIC][WARNING] {hallucinated_evidence_count} finding(s) still ungrounded after {analysis_grounding_retries} retries. Proceeding with grounded=false flags preserved.")
+                    _notify(f"⚠️ {hallucinated_evidence_count} finding(s) remain unverified after retries. They are included but flagged.")
+                    state["analysis_grounded"] = False
+                else:
+                    state["analysis_grounded"] = True
                 
                 # --- Feature 2: Systemic Audit Trigger (Generic) ---
-                # If we found a grounded flaw in the first pass, instruct the Analyzer to check neighboring files.
+                # If we found a grounded flaw in the first pass, instruct the Analyzer to sweep for same-class bugs.
                 if iteration == 0 and grounded_count > 0:
                     source_files = set()
                     for f_item in findings:
-                        if f_item.get("location", {}).get("file"):
-                            source_files.add(f_item["location"]["file"])
+                        # findings use "file" at top level, not "location.file"
+                        if f_item.get("file"):
+                            source_files.add(f_item["file"])
                     
                     if source_files:
                         audit_instruction = (
                             f"\n\n### SYSTEMIC AUDIT REQUIRED\n"
                             f"A grounded security flaw pattern has been identified in: {list(source_files)}\n"
-                            f"Instruction: Review the other files in the project for identical or similar structural patterns. "
-                            f"Security vulnerabilities of this nature are often systemic; ensure your diagnosis accounts for all occurrences across the provided context.\n"
+                            f"Instruction: Review ALL handlers/routes/functions in the SAME file(s) for the identical "
+                            f"vulnerability class (e.g., if DELETE /:id is missing an auth check, check GET /:id, PUT /:id, "
+                            f"and every other handler in that file too). Also check neighboring files in the project for "
+                            f"similar structural patterns. Each additional instance MUST be a separate finding.\n"
                         )
                         state["original_input"] += audit_instruction
                         state["analyzer_input"] += audit_instruction
@@ -941,7 +1064,23 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             time.sleep(0.8) # Demo delay
             _notify("🛠️ Action agent is generating a fix and drafting the patch...")
             try:
-                contribution = action_agent.run(state, llm_client, lokr_service)
+                import time, sys
+                _t0_action = time.time()
+                print(f"[TIMING] Action RUN start", file=sys.stderr)
+                import os
+                raw_files_text = "\n\n### FULL RAW SOURCE CODE FILES ###\n"
+                for fpath in state.get("selected_files", []):
+                    full_path = os.path.join(lokr_service.project_path, fpath) if lokr_service else fpath
+                    try:
+                        with open(full_path, "r", encoding="utf-8") as f:
+                            raw_files_text += f"\n// File: {fpath}\n{f.read()}\n"
+                    except Exception:
+                        pass
+                
+                action_state = dict(state)
+                action_state["original_input"] = action_state.get("original_input", "") + raw_files_text
+                contribution = action_agent.run(action_state, llm_client, lokr_service)
+                print(f"[TIMING] Action RUN end: {time.time() - _t0_action:.2f}s", file=sys.stderr)
             except ValueError as e:
                 print(f"[ORCHESTRATOR][CRITICAL] Action agent validation failed: {e}")
                 _notify(f"🚨 Action agent failed: {e}")
@@ -954,6 +1093,29 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                 state["status"] = "failed"
                 state["error"] = f"ACTION_RUNTIME_ERROR: {str(e)}"
                 break
+                
+            patch_text = contribution.get("contribution", {}).get("patch", "")
+            if patch_text:
+                context_text = state.get("original_input", "") + state.get("analyzer_input", "")
+                patch_grounded = is_patch_grounded(patch_text, context_text)
+                state["patch_grounded"] = patch_grounded
+                
+                if not patch_grounded:
+                    action_grounding_retries = state.get("_action_grounding_retries", 0)
+                    if action_grounding_retries < 2:
+                        print(f"[FORENSIC][WARNING] Action patch context/removed lines are NOT grounded (attempt {action_grounding_retries + 1}/2).")
+                        _notify("⚠️ Action patch contains hallucinated lines. Forcing revision.")
+                        sanity_feedback = "\n\n### PATCH GROUNDING FAILURE\nThe patch you generated contains hallucinated context lines or removed lines that do not exist in the source code. You must use exact, literal lines from the RETRIEVED SOURCE CODE CONTEXT."
+                        state["analyzer_input"] = re.sub(r'\n\n### PATCH GROUNDING FAILURE\n.*?(?=\n\n### |$)', '', state.get("analyzer_input", ""), flags=re.DOTALL)
+                        state["analyzer_input"] += sanity_feedback
+                        state["actions"] = []
+                        state["status"] = "needs_new_action"
+                        state["_action_grounding_retries"] = action_grounding_retries + 1
+                        continue
+                    else:
+                        print("[FORENSIC][WARNING] Action patch failed grounding after 2 retries. Proceeding anyway.")
+                        _notify("⚠️ Action patch failed grounding after 2 retries. Proceeding with caution.")
+
             state["actions"].append(contribution)
             
             # Live Reasoning Notification
@@ -978,7 +1140,9 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
                 patch_is_empty = not patch_text or patch_text == ""
                 patch_is_echo = patch_text and patch_text in code_only  # Patch just copies a line that actually exists in the code
                 
-                if patch_is_empty or patch_is_echo:
+                if patch_is_empty and contribution.get("lokr_requests"):
+                    print("[ORCHESTRATOR] Action Agent requested Lokr data. Allowing empty patch.")
+                elif patch_is_empty or patch_is_echo:
                     reason = "empty patch" if patch_is_empty else f"patch '{patch_text}' is identical to existing code (echo)"
                     print(f"[ORCHESTRATOR] Patch sanity check FAILED: {reason}. Looping back to Analyzer...")
                     
@@ -1083,7 +1247,11 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             time.sleep(0.8) # Demo delay
             _notify("🛡️ Safety agent is performing a security audit and evaluating deployment risk...")
             try:
+                import time, sys
+                _t0_safety = time.time()
+                print(f"[TIMING] Safety RUN start", file=sys.stderr)
                 contribution = safety_agent.run(state, llm_client, lokr_service)
+                print(f"[TIMING] Safety RUN end: {time.time() - _t0_safety:.2f}s", file=sys.stderr)
             except ValueError as e:
                 print(f"[ORCHESTRATOR][CRITICAL] Safety agent validation failed: {e}")
                 _notify(f"🚨 Safety agent failed: {e}")
@@ -1178,7 +1346,11 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             time.sleep(0.8) # Demo delay
             _notify("✅ Validator is performing final verification and cross-checking the fix...")
             try:
+                import time, sys
+                _t0_validator = time.time()
+                print(f"[TIMING] Validator RUN start", file=sys.stderr)
                 contribution = validator_agent.run(state, llm_client, lokr_service)
+                print(f"[TIMING] Validator RUN end: {time.time() - _t0_validator:.2f}s", file=sys.stderr)
             except ValueError as e:
                 print(f"[ORCHESTRATOR][CRITICAL] Validator validation failed: {e}")
                 _notify(f"🚨 Validator failed: {e}")
@@ -1280,6 +1452,12 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
             "action": state["actions"][-1].get("contribution", {}),
             "safety": safety_contrib,
             "validation": state["validations"][-1].get("contribution", {}),
+            "grounding": {
+                "analysis_ratio": state.get("grounding_ratio", 0.0),
+                "analysis_grounded": state.get("analysis_grounded", False),
+                "patch_grounded": state.get("patch_grounded", False),
+                "report": f"{state.get('findings_total', 0)} findings raised, {state.get('findings_grounded', 0)} grounded, {state.get('findings_unverified', 0)} unverified"
+            },
             # Raw agent data for UI reasoning trace
             "_raw_hypotheses": state["hypotheses"],
             "_raw_actions": state["actions"],
@@ -1303,6 +1481,12 @@ def _run_agent_loop(intent: str, extracted_code: str, files_to_analyze: list, us
         "action": state["actions"][-1].get("contribution", {}) if state.get("actions") else {},
         "safety": state["safety_reports"][-1].get("contribution", {}) if state.get("safety_reports") else {},
         "validation": state["validations"][-1].get("contribution", {}) if state.get("validations") else {},
+        "grounding": {
+            "analysis_ratio": state.get("grounding_ratio", 0.0),
+            "analysis_grounded": state.get("analysis_grounded", False),
+            "patch_grounded": state.get("patch_grounded", False),
+            "report": f"{state.get('findings_total', 0)} findings raised, {state.get('findings_grounded', 0)} grounded, {state.get('findings_unverified', 0)} unverified"
+        },
         "_raw_hypotheses": state.get("hypotheses", []),
         "_raw_actions": state.get("actions", []),
         "_raw_safety": state.get("safety_reports", []),
