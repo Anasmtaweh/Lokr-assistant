@@ -34,8 +34,12 @@ if st.sidebar.button("Re-index Project", disabled=not project_dir):
         # Check for local submodule first, then environment variable, then fallback
         current_dir = os.path.dirname(os.path.abspath(__file__))
         local_lokr = os.path.join(current_dir, "lokr_core")
-        lokr_path = os.environ.get("LOKR_PATH", local_lokr if os.path.exists(local_lokr) else "/home/anas/dev-oracle")
+        dev_oracle_path = os.path.expanduser("~/dev-oracle")
+        lokr_path = os.environ.get("LOKR_PATH", local_lokr if os.path.exists(local_lokr) else (dev_oracle_path if os.path.exists(dev_oracle_path) else local_lokr))
         venv_python = os.path.join(lokr_path, ".venv", "bin", "python")
+        if not os.path.exists(venv_python):
+            import sys
+            venv_python = sys.executable
         main_py = os.path.join(lokr_path, "main.py")
         config_yaml = os.path.join(lokr_path, "config.yaml")
         

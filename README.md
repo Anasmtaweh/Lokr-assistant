@@ -17,7 +17,7 @@ pinned: false
 
 **Diagnose bugs. Review diffs. Gate deployments. All grounded in your actual codebase.**
 
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B.svg)](https://streamlit.io)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-000000.svg)](https://ollama.com)
 [![Agent Autonomy](https://img.shields.io/badge/Agents-Autonomous-brightgreen.svg)]()
@@ -345,9 +345,9 @@ Safety rejects (with suggestions) → Action revises → Safety re-checks
 
 **Output:** Mandatory findings injected into Analyzer context:
 ```
-[PRESCAN] 🔴 Detected 2 backdoor pattern(s)
-  [PRESCAN-001] Debug Header in middleware/auth.js:12
-  [PRESCAN-002] Auth Bypass Pattern in middleware/auth.js:15
+[PRESCAN] 🔴 Detected 2 backdoor pattern(s) across 10 files.
+  [PRESCAN-001] Header-Based Auth Bypass in src/middleware/auth.js:10
+  [PRESCAN-002] Hardcoded Role Escalation in src/middleware/auth.js:11
 ```
 
 ### 4. Fail-Loud Schema Validation
@@ -474,9 +474,9 @@ Blockers:
 
 **Pre-scan detects:**
 ```
-[PRESCAN] 🔴 Detected 2 backdoor pattern(s)
-  [PRESCAN-001] Hardcoded Debug Header in src/middleware/auth.js:12
-  [PRESCAN-002] Authentication Bypass / Backdoor in src/middleware/auth.js:15
+[PRESCAN] 🔴 Detected 2 backdoor pattern(s) across 10 files.
+  [PRESCAN-001] Header-Based Auth Bypass in src/middleware/auth.js:10
+  [PRESCAN-002] Hardcoded Role Escalation in src/middleware/auth.js:11
 ```
 
 **Expected Result:** 
@@ -645,7 +645,7 @@ Intent Classifier (keywords + LLM)
 
 ### Prerequisites
 
-- **Python 3.8+**
+- **Python 3.10+** (Python 3.10 – 3.12 recommended)
 - **Ollama** (for local privacy) OR any **OpenAI-compatible API**
 - **Lokr (dev-oracle)** indexed on your project *(optional but recommended)*
 
@@ -717,8 +717,11 @@ The UI will:
 ### Run via CLI
 
 ```bash
-# Repair mode
-python main.py repair -c "your code" --model <model> --api-url <url>
+# Repair mode (Local Ollama)
+python main.py repair -c "your code" --model qwen2.5-coder:7b --api-url http://localhost:11434
+
+# Repair mode (Remote OpenAI-compatible endpoint)
+python main.py repair -c "your code" --model <model> --api-url <url> --api-key <key>
 
 # Review mode
 python main.py review -d "your diff" --model <model> --api-url <url>
@@ -727,17 +730,24 @@ python main.py review -d "your diff" --model <model> --api-url <url>
 python main.py prevent -c "your code" --model <model> --api-url <url>
 ```
 
-> **Note:** Add `--api-key` for remote APIs and `--project /path/to/project` to enable Lokr Graph-RAG context.
+> **Note:** Providing `--api-key` automatically selects the OpenAI-compatible provider (`--api-type openai`). Add `--project /path/to/project` to enable Lokr Graph-RAG context. You can also define variables in a `.env` file.
 
 ### Run as MCP Server (Model Context Protocol)
 
-You can also run Lokr Assistant as an MCP server to integrate directly with IDEs and AI agent tools:
+You can also run Lokr Assistant as an MCP server to integrate directly with IDEs and AI agent tools (Cursor, Claude Desktop, Antigravity):
 
 ```bash
 python assistant_mcp_server.py
 ```
 
 Exposes `run_repair`, `run_review`, `run_prevent`, and `check_task` tools over MCP stdio transport.
+
+**Configurable Environment Variables (via shell or `.env`):**
+- `API_KEY`: API key for remote LLM providers.
+- `MODEL`: Model name (default: `accounts/fireworks/models/glm-5p3-flash`).
+- `API_URL`: Base API URL (default: `https://api.fireworks.ai/inference/v1`).
+- `API_TYPE`: `openai` or `ollama` (default: `openai`).
+- `LOKR_PROJECT_PATH`: Target project directory (defaults to `./lokr-demo-app`).
 
 ---
 

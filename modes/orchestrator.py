@@ -1516,10 +1516,10 @@ def run_assistant(
     
     if use_lokr and project_path:
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        # orchestrator is in modes/, so project root is one level up
         project_root = os.path.dirname(current_dir)
         local_lokr = os.path.join(project_root, "lokr_core")
-        lokr_path = os.environ.get("LOKR_PATH", local_lokr if os.path.exists(local_lokr) else "/home/anas/dev-oracle")
+        dev_oracle_path = os.path.expanduser("~/dev-oracle")
+        lokr_path = os.environ.get("LOKR_PATH", local_lokr if os.path.exists(local_lokr) else (dev_oracle_path if os.path.exists(dev_oracle_path) else local_lokr))
         llm_config = {
             "base_url": base_url,
             "api_key": api_key,
@@ -1601,7 +1601,7 @@ if __name__ == "__main__":
     
     res = run_assistant(
         user_input=test_input,
-        project_path="/home/anas/Desktop/FILES NEEDED/pet-ai-render",
+        project_path=os.environ.get("LOKR_PROJECT_PATH", "./lokr-demo-app"),
         use_lokr=True
     )
     

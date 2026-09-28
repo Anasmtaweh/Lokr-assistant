@@ -13,3 +13,4 @@ networkx>=3.0
 chromadb>=0.4.0
 litellm
 mcp<2
+python-dotenv

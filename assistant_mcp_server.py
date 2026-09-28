@@ -7,6 +7,12 @@ import threading
 import uuid
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from mcp.server.fastmcp import FastMCP
 from modes.orchestrator import run_assistant
 
@@ -22,9 +28,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Resolve absolute paths
+# Resolve absolute paths and configuration
 _PROJECT_ROOT = Path(__file__).resolve().parent
-_DEMO_APP_PATH = Path("/home/anas/MyProjects/pet-ai-project")
+_DEFAULT_DEMO_APP = _PROJECT_ROOT / "lokr-demo-app"
+_DEMO_APP_PATH = Path(
+    os.environ.get("LOKR_PROJECT_PATH")
+    or (_DEFAULT_DEMO_APP if _DEFAULT_DEMO_APP.exists() else "/home/anas/MyProjects/pet-ai-project")
+)
+
+_MODEL = os.environ.get("MODEL", "accounts/fireworks/models/glm-5p3-flash")
+_BASE_URL = os.environ.get("API_URL", "https://api.fireworks.ai/inference/v1")
+_API_TYPE = os.environ.get("API_TYPE", "openai")
 
 # Initialize FastMCP
 mcp = FastMCP("Lokr Assistant Pipeline")
@@ -40,11 +54,11 @@ def _run_pipeline_background(task_id: str, user_input: str):
             result = run_assistant(
                 user_input=user_input,
                 project_path=str(_DEMO_APP_PATH),
-                model="accounts/fireworks/models/glm-5p3-flash",
+                model=_MODEL,
                 use_lokr=True,
                 progress_callback=lambda msg: logger.info(f"Progress: {msg}"),
-                api_type="openai",
-                base_url="https://api.fireworks.ai/inference/v1",
+                api_type=_API_TYPE,
+                base_url=_BASE_URL,
                 api_key=os.environ.get("API_KEY")
             )
         TASKS[task_id]["status"] = "done"

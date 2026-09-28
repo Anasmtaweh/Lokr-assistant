@@ -71,18 +71,20 @@ class ActionAgent(BaseAgent):
         self._last_failed_text = text
         return {}
 
-    def run(self, state: Dict[str, Any], llm_client: Any, lokr_service: Any) -> Dict[str, Any]:
+    def run(self, state: Dict[str, Any], llm_client: Any = None, lokr_service: Any = None) -> Dict[str, Any]:
         """
         Run the agent's main logic on the given state and return a result dict.
         
         Args:
             state (dict): The full shared orchestration state.
-            llm_client: The LLM client to use.
-            lokr_service: The Lokr service to use.
+            llm_client (optional): The LLM client to use. Defaults to self.llm_client.
+            lokr_service (optional): The Lokr service to use. Defaults to self.lokr_service.
             
         Returns:
             dict: Contains 'chain_of_thought', 'contribution', and 'lokr_requests'.
         """
+        llm_client = llm_client if llm_client is not None else self.llm_client
+        lokr_service = lokr_service if lokr_service is not None else self.lokr_service
         self._log("Starting action generation...")
         
         mode = state.get("mode", self.mode)
@@ -249,9 +251,9 @@ if __name__ == "__main__":
         test_context = {"diagnosis": "The code lacks error handling.", "mode": "repair"}
         result = agent.run(test_context)
         print(f"Result:\n{json.dumps(result, indent=2)}")
-        if isinstance(result, dict) and "action_type" in result:
+        if isinstance(result, dict) and ("contribution" in result or "action_type" in result):
             print("\nActionAgent LLM integration test passed.")
         else:
-            print("\nTest failed.")
+            print("\nTest failed: Result missing contribution.")
     except Exception as e:
         print(f"\nTest failed with error: {e}")

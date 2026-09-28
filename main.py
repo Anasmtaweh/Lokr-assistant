@@ -8,7 +8,14 @@ using the main run_assistant() orchestrator entry point.
 import argparse
 import sys
 import json
+import os
 from typing import Optional
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 from modes.orchestrator import run_assistant
 
@@ -94,6 +101,12 @@ def main():
             sys.exit(1)
         user_input = f"Check if this change is safe to deploy:\n{input_data}"
 
+    # Auto-detect openai provider if api_key is provided and api-type wasn't explicitly passed
+    api_key = args.api_key or os.environ.get("API_KEY")
+    api_type = args.api_type
+    if api_key and api_type == "ollama" and ("--api-type" not in sys.argv):
+        api_type = "openai"
+
     # Call run_assistant from modes.orchestrator
     try:
         result = run_assistant(
@@ -102,9 +115,9 @@ def main():
             model=args.model,
             use_lokr=bool(args.project),
             progress_callback=print,
-            api_type=args.api_type,
+            api_type=api_type,
             base_url=args.api_url,
-            api_key=args.api_key
+            api_key=api_key
         )
         print("\nFinal Result:")
         print(json.dumps(result, indent=2))
