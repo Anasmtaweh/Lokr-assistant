@@ -21,7 +21,7 @@ pinned: false
 [![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B.svg)](https://streamlit.io)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-000000.svg)](https://ollama.com)
 [![Agent Autonomy](https://img.shields.io/badge/Agents-Autonomous-brightgreen.svg)]()
-[![26x Efficient](https://img.shields.io/badge/Context-26x%20Efficient-blue.svg)]()
+[![Context Efficient](https://img.shields.io/badge/Context-Minimal%20Injection-blue.svg)]()
 [![Fail-Loud](https://img.shields.io/badge/Validation-Fail--Loud-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -29,8 +29,8 @@ pinned: false
 
 - ✅ **3 Equally-Polished Features** — Repair, Review, Prevent modes (not 1 perfect feature)
 - ✅ **Real Agent Autonomy** — Agents autonomously call Lokr via `lokr_requests`, not orchestrator-driven
-- ✅ **26x Context Efficiency** — Initial analyzer input: 21k → 800 tokens through agentic discovery
-- ✅ **3.1x Revision Speed** — Safety → Action targeted feedback saves 70% of tokens per revision cycle
+- ✅ **Minimal Context Injection** — Analyzer starts with only a bug report and entry points, then requests more context as needed
+- ✅ **Fast-Path Revisions** — Safety → Action targeted feedback avoids restarting the full pipeline
 - ✅ **Forensically Hardened** — Fail-loud validation, token tracking, grounding ratio logging
 
 ### ⚠️ Note for Judges (Configuration)
@@ -53,9 +53,9 @@ Together, the system acts as an AI engineering copilot. Unlike generic LLM codin
 
 ### ⭐ Hackathon Innovations
 
-1. **Agentic Context Discovery** — Analyzer starts with just 800 tokens (vs. 21k) and autonomously queries Lokr for precise dependencies. **26x context reduction, 62% inference cost savings.**
+1. **Agentic Context Discovery** — Analyzer starts with only a bug report and entry points, then autonomously queries Lokr for the specific dependencies it needs instead of receiving everything upfront.
 
-2. **Safety → Action Fast-Path** — Rejected patches don't trigger full pipeline restart. Safety agent provides targeted revision suggestions directly to Action. **70% token savings per revision cycle.**
+2. **Safety → Action Fast-Path** — Rejected patches don't trigger full pipeline restart. Safety agent provides targeted revision suggestions directly to Action, avoiding redundant work.
 
 3. **Deterministic Pre-Scan** — Regex-based scanner catches CAT-0 backdoors (debug headers, hardcoded admin bypasses) before LLM runs. **Critical vulnerabilities can't be hallucinated away.**
 
@@ -65,7 +65,7 @@ Together, the system acts as an AI engineering copilot. Unlike generic LLM codin
 
 Unlike generic AI coding tools, Lokr Assistant:
 - **Verifies findings** against your actual code structure (not hallucinations)
-- **Stays focused** through agentic context discovery (800 tokens, not 21k)
+- **Stays focused** through agentic context discovery (requests only what it needs)
 - **Makes evidence-based decisions** using Lokr's verified dependency graph
 - **Fails loudly** when agents malfunction (no silent degradation to stub data)
 - **Revises efficiently** through direct Safety → Action feedback loops
@@ -76,9 +76,9 @@ Unlike generic AI coding tools, Lokr Assistant:
 
 ### Against Generic AI Assistants (ChatGPT, Copilot, Claude)
 - ✅ **Grounded in Code Reality** — Every finding cross-referenced against Lokr's dependency graph. Generic assistants hallucinate; we verify.
-- ✅ **Agent Autonomy** — Agents *autonomously* request code context via `lokr_requests` instead of receiving 21k-token brain dumps. Stays focused, reduces hallucination.
+- ✅ **Agent Autonomy** — Agents *autonomously* request code context via `lokr_requests` instead of receiving large pre-fetched context dumps. Stays focused, reduces hallucination.
 - ✅ **Fail-Loud, Not Silent** — Malformed LLM outputs raise explicit errors instead of degrading silently to stub data.
-- ✅ **3.1x Faster Revisions** — Safety rejections route directly to Action with `revision_suggestions`, not full pipeline restart. Saves 70% of tokens per revision.
+- ✅ **Fast-Path Revisions** — Safety rejections route directly to Action with `revision_suggestions`, not full pipeline restart.
 - ✅ **Deterministic Pre-Scan** — Catches CAT-0 backdoors (debug headers, auth bypasses, logic inversions) with regex before LLM runs.
 
 ### Against Static Analysis Tools (Bandit, ESLint, SonarQube)
@@ -99,53 +99,44 @@ Unlike generic AI coding tools, Lokr Assistant:
 
 ### Context Optimization (Sentinel 2.0)
 
-Lokr Assistant uses **agentic context discovery** instead of context bombing:
+Lokr Assistant uses **agentic context discovery** instead of dumping all retrieved code upfront:
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| **Initial Analyzer Context** | 21,000 tokens | 800 tokens | **26x** smaller |
-| **Context + 2 Lokr Requests** | ~25,000 tokens | 3,500 tokens | **7x** smaller |
-| **Full Repair Pipeline** | 8,500 tokens | 3,200 tokens | **62% reduction** |
-| **Safety Revision Cost** | 2,500 tokens | 700 tokens | **72% reduction** |
-| **Cost per Repair Run** | $0.13 | $0.05 | **$0.08 savings** |
-
-**What This Means:**
-- 🚀 **4-8x faster** LLM inference (smaller context = faster tokens)
-- 💰 **$3.75 saved** per 50 runs (real cost reduction)
-- 🎯 **Better accuracy** (focused context = fewer hallucinations)
-- ⚡ **Faster iteration** on the hackathon (critical advantage)
+- The Analyzer starts with only the bug report and a few entry-point function names
+- It autonomously issues `lokr_requests` to pull in specific dependencies as needed
+- The orchestrator logs token estimates at each step via `[FORENSIC]` tags, and warns if input exceeds an 8k token budget
+- This keeps the LLM focused on relevant code instead of sifting through unrelated files
 
 ### Token Flow Visualization
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ BEFORE: Orchestrator Pre-Fetches Everything            │
+│ BEFORE: Orchestrator Pre-Fetches Everything             │
 ├─────────────────────────────────────────────────────────┤
 │ Orchestrator:                                           │
-│  - Finds 20 relevant files via Lokr                    │
-│  - Dumps ALL file summaries (3k tokens)                │
-│  - Includes full middleware source (5k tokens)         │
-│  - Adds relationship graph (2k tokens)                 │
-│  → Analyzer receives 21k tokens of bloat               │
-│  → LLM struggles with unfocused context                │
-│  → Hallucinations increase with context size           │
+│  - Finds relevant files via Lokr                        │
+│  - Dumps ALL file summaries                             │
+│  - Includes full middleware source                      │
+│  - Adds relationship graph                              │
+│  → Analyzer receives a large unfocused context          │
+│  → LLM struggles with irrelevant information            │
+│  → Hallucinations increase with context size            │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
-│ AFTER: Agentic Context Discovery                       │
+│ AFTER: Agentic Context Discovery                        │
 ├─────────────────────────────────────────────────────────┤
-│ Orchestrator → Analyzer (800 tokens):                  │
-│  "Here's the bug report + 2-3 entry functions"         │
+│ Orchestrator → Analyzer:                                │
+│  "Here's the bug report + 2-3 entry functions"          │
 │                                                         │
-│ Analyzer → Orchestrator:                               │
-│  "I need: dependencies of deletePet, auth middleware"  │
+│ Analyzer → Orchestrator:                                │
+│  "I need: dependencies of deletePet, auth middleware"   │
 │                                                         │
-│ Orchestrator → Lokr → Analyzer (2.7k tokens):          │
-│  [Results of requested queries]                        │
+│ Orchestrator → Lokr → Analyzer:                         │
+│  [Results of requested queries only]                    │
 │                                                         │
-│ Analyzer re-runs with focused context                  │
-│  → Produces grounded diagnosis                         │
-│  → Fewer hallucinations (less context noise)           │
+│ Analyzer re-runs with focused context                   │
+│  → Produces grounded diagnosis                          │
+│  → Fewer hallucinations (less context noise)            │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -307,9 +298,9 @@ PREVENT MODE PIPELINE:
 
 ### 1. Agentic Context Discovery
 
-**Problem:** Most AI systems pre-fetch 21k tokens of context, overwhelming the LLM.
+**Problem:** Most AI systems pre-fetch all available context, overwhelming the LLM with irrelevant code.
 
-**Solution:** Analyzer starts with minimal context (800 tokens) and autonomously requests additional details:
+**Solution:** Analyzer starts with minimal context (bug report + entry points) and autonomously requests additional details:
 
 ```
 Analyzer: "I see a bug in deletePet. I need to understand the ownership validation."
@@ -318,7 +309,7 @@ Lokr: [returns dependency graph + validation functions]
 Analyzer: [re-analyzes with new context, produces grounded diagnosis]
 ```
 
-**Benefit:** Analyzer stays focused, fewer hallucinations, 26x context efficiency.
+**Benefit:** Analyzer stays focused on relevant code, reducing hallucinations.
 
 ### 2. Safety → Action Fast-Path Revision
 
@@ -394,10 +385,10 @@ state["error"] = "ANALYZER_VALIDATION_ERROR: Missing required field: contributio
 
 | Decision | Rationale | Impact |
 |----------|-----------|--------|
-| **Minimal Context Injection** | Analyzer starts with ~800 tokens instead of ~21k | 26x smaller context, fewer hallucinations |
+| **Minimal Context Injection** | Analyzer starts with bug report + entry points instead of full code dump | Focused context, fewer hallucinations |
 | **Deterministic Pre-Scan** | Regex catches CAT-0 patterns before LLM | Can't hallucinate away security issues |
 | **Fail-Loud Agents** | Agents raise `ValueError` on malformed output | No silent degradation to stubs |
-| **Safety → Action Fast-Path** | Targeted revisions skip Analyzer | 70% token savings per revision |
+| **Safety → Action Fast-Path** | Targeted revisions skip Analyzer | Avoids redundant pipeline restarts |
 | **Token-Based Evidence** | Meaningful code tokens instead of substrings | Handles LLM abbreviations correctly |
 | **Cascading Skepticism** | Each agent distrusts unverified claims | Grounded findings only |
 | **Cross-Referencing** | Action reads both Analyzer + raw input | Catches dropped evidence |
@@ -636,7 +627,7 @@ Intent Classifier (keywords + LLM)
 | Guardrail | Mechanism | Benefit |
 |-----------|-----------|---------|
 | **Schema Validation** | All agents raise `ValueError` on malformed JSON | No stub fallbacks, explicit errors |
-| **Evidence Grounding** | Token-based matching handles LLM abbreviations; logs ratio | <10% false rejections, visible quality |
+| **Evidence Grounding** | Token-based matching handles LLM abbreviations; logs ratio | Visible grounding quality per run |
 | **Soft-Fail Threshold** | Warns (not aborts) if <50% findings grounded; Safety is final judge | Allows imperfect-but-useful findings |
 | **Loop Detection** | Safety↔Action: 3 iterations. Main: 25 iterations | Prevents infinite loops |
 | **Token Budget** | Forensic logging warns if analyzer input > 8k tokens | Early warning of context bloat |
