@@ -25,19 +25,19 @@ pinned: false
 [![Fail-Loud](https://img.shields.io/badge/Validation-Fail--Loud-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-### ⭐ Hackathon Achievements
+### Features at a Glance
 
-- ✅ **3 Equally-Polished Features** — Repair, Review, Prevent modes (not 1 perfect feature)
-- ✅ **Real Agent Autonomy** — Agents autonomously call Lokr via `lokr_requests`, not orchestrator-driven
-- ✅ **Minimal Context Injection** — Analyzer starts with only a bug report and entry points, then requests more context as needed
-- ✅ **Fast-Path Revisions** — Safety → Action targeted feedback avoids restarting the full pipeline
-- ✅ **Forensically Hardened** — Fail-loud validation, token tracking, grounding ratio logging
+- **3 Modes** — Repair, Review, and Prevent
+- **Agent Autonomy** — Agents call Lokr on their own via `lokr_requests`, not orchestrator-driven
+- **Minimal Context Injection** — Analyzer starts with only a bug report and entry points, then requests more context as needed
+- **Fast-Path Revisions** — Safety → Action targeted feedback avoids restarting the full pipeline
+- **Fail-Loud Validation** — Token tracking, grounding ratio logging, explicit errors on malformed output
 
-### ⚠️ Note for Judges (Configuration)
-To properly evaluate this multi-agent architecture, please configure the LLM backend via the UI sidebar:
-1. **API URL & Key:** Please input your own OpenAI-compatible API URL and API Key. Examples are provided in the UI placeholders.
-2. **Model Selection:** Please input the exact Model Name for your chosen provider.
-3. **Minimum Requirements:** You MUST use a highly capable model with **33B parameters or higher** (e.g., `Qwen2.5-Coder-32B-Instruct`). The framework orchestrates multiple specialized agents that rely on complex JSON output parsing; smaller models will suffer from context truncation.
+### ⚠️ Configuration Note
+To run this multi-agent system, configure the LLM backend via the UI sidebar:
+1. **API URL & Key:** Input your own OpenAI-compatible API URL and API Key. Examples are provided in the UI placeholders.
+2. **Model Selection:** Input the exact Model Name for your chosen provider.
+3. **Minimum Requirements:** Use a model with **33B parameters or higher** (e.g., `Qwen2.5-Coder-32B-Instruct`). The framework orchestrates multiple agents that rely on complex JSON output parsing; smaller models will struggle with context truncation.
 
 </div>
 
@@ -51,47 +51,38 @@ To properly evaluate this multi-agent architecture, please configure the LLM bac
 
 Together, the system acts as an AI engineering copilot. Unlike generic LLM coding tools that suffer from context bloat and hallucination, Lokr Assistant grounds its decision-making in a localized dependency graph using the Lokr engine.
 
-### ⭐ Hackathon Innovations
+### Design Choices
 
 1. **Agentic Context Discovery** — Analyzer starts with only a bug report and entry points, then autonomously queries Lokr for the specific dependencies it needs instead of receiving everything upfront.
 
 2. **Safety → Action Fast-Path** — Rejected patches don't trigger full pipeline restart. Safety agent provides targeted revision suggestions directly to Action, avoiding redundant work.
 
-3. **Deterministic Pre-Scan** — Regex-based scanner catches CAT-0 backdoors (debug headers, hardcoded admin bypasses) before LLM runs. **Critical vulnerabilities can't be hallucinated away.**
+3. **Deterministic Pre-Scan** — Regex-based scanner catches common backdoor patterns (debug headers, hardcoded admin bypasses) before the LLM runs.
 
-4. **Fail-Loud Architecture** — All agents validate their own JSON output. Invalid schemas raise explicit errors instead of silently degrading to stub data. **Zero silent failures.**
-
----
-
-Unlike generic AI coding tools, Lokr Assistant:
-- **Verifies findings** against your actual code structure (not hallucinations)
-- **Stays focused** through agentic context discovery (requests only what it needs)
-- **Makes evidence-based decisions** using Lokr's verified dependency graph
-- **Fails loudly** when agents malfunction (no silent degradation to stub data)
-- **Revises efficiently** through direct Safety → Action feedback loops
+4. **Fail-Loud Architecture** — All agents validate their own JSON output, raising explicit errors if schemas are invalid rather than falling back to placeholder data.
 
 ---
 
-## 🚀 Why Lokr Assistant Wins
+## How It Compares
 
-### Against Generic AI Assistants (ChatGPT, Copilot, Claude)
-- ✅ **Grounded in Code Reality** — Every finding cross-referenced against Lokr's dependency graph. Generic assistants hallucinate; we verify.
-- ✅ **Agent Autonomy** — Agents *autonomously* request code context via `lokr_requests` instead of receiving large pre-fetched context dumps. Stays focused, reduces hallucination.
-- ✅ **Fail-Loud, Not Silent** — Malformed LLM outputs raise explicit errors instead of degrading silently to stub data.
-- ✅ **Fast-Path Revisions** — Safety rejections route directly to Action with `revision_suggestions`, not full pipeline restart.
-- ✅ **Deterministic Pre-Scan** — Catches CAT-0 backdoors (debug headers, auth bypasses, logic inversions) with regex before LLM runs.
+### vs. Generic AI Assistants (ChatGPT, Copilot, Claude)
+- Findings are cross-referenced against Lokr's dependency graph instead of relying on the LLM's memory alone.
+- Agents request code context on their own via `lokr_requests` instead of receiving a large pre-fetched dump.
+- Malformed LLM outputs raise explicit errors instead of silently falling back to stub data.
+- Safety rejections route directly to Action with `revision_suggestions` instead of restarting the full pipeline.
+- A regex pre-scan catches known backdoor patterns (debug headers, auth bypasses) before the LLM runs.
 
-### Against Static Analysis Tools (Bandit, ESLint, SonarQube)
-- ✅ **Human Context** — Understands *why* code matters, not just AST patterns
-- ✅ **Intention Grounding** — Distinguishes between "safe README update" and "removed auth middleware"
-- ✅ **Executive Summary** — Produces human-readable diagnoses, not raw linter warnings
-- ✅ **Risk Scoring** — Contextual severity (same bug is critical in payment code, minor in logging)
+### vs. Static Analysis Tools (Bandit, ESLint, SonarQube)
+- Understands *why* code matters, not just AST patterns.
+- Distinguishes between "safe README update" and "removed auth middleware."
+- Produces human-readable diagnoses, not raw linter warnings.
+- Risk scoring is contextual — the same bug is more severe in payment code than in logging.
 
-### Against Manual Code Review
-- ✅ **24/7 Availability** — No context-switching overhead, consistent sleep schedule
-- ✅ **Evidence Trail** — Every decision logged with forensic timestamps for audit
-- ✅ **Consistent Standards** — Same rigor for 3am deploys and Monday code reviews
-- ✅ **Impossible to Skip** — Deployment gate blocks unsafe changes automatically
+### vs. Manual Code Review
+- Runs on every request without context-switching overhead.
+- Every decision is logged with timestamps for audit.
+- Applies the same checks regardless of time of day.
+- Deployment gate blocks unsafe changes automatically.
 
 ---
 
@@ -140,14 +131,14 @@ Lokr Assistant uses **agentic context discovery** instead of dumping all retriev
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Evidence Grounding Quality & Fail-Closed Guarantee
+### Evidence Grounding & Verification
 
-Lokr Assistant enforces a **Fail-Closed Evidence Grounding System** to eliminate silent drops and hallucinations:
+Findings are checked against retrieved source code before being reported:
 
-- **Verbatim Snippet Anchors**: Every finding requires a `quoted_code` field matching real code from retrieved files.
-- **Auto-Fetch Recovery**: If a finding fails grounding due to missing source code, the pipeline automatically fetches full source via Lokr and retries (capped at 2 retries).
-- **Zero Silent Drops**: Findings that remain unverified after retries are **retained** in output marked explicitly as `"grounded": false`.
-- **Structured Grounding Reports**: Every run returns explicit grounding summary metrics:
+- **Verbatim Snippet Matching**: Findings include a `quoted_code` field checked against real code in retrieved files.
+- **Auto-Fetch Recovery**: If a finding references code from an unretrieved file, the pipeline fetches the source via Lokr and retries (capped at 2 retries).
+- **Explicit Grounding Flags**: Findings that remain unverified after retries are kept in the report but marked explicitly as `"grounded": false`.
+- **Structured Grounding Metrics**: Every run returns summary metrics:
 
 ```json
 "grounding": {
@@ -294,7 +285,7 @@ PREVENT MODE PIPELINE:
 
 ---
 
-## 🔬 Architectural Innovations (Hackathon Built)
+## 🔬 Key Architectural Mechanics
 
 ### 1. Agentic Context Discovery
 
@@ -369,15 +360,15 @@ state["status"] = "failed"
 state["error"] = "ANALYZER_VALIDATION_ERROR: Missing required field: contribution"
 ```
 
-### 5. Fail-Closed Evidence Grounding & Auto-Fetch Recovery
+### 5. Evidence Grounding & Auto-Fetch Recovery
 
-**Problem:** Standard LLMs hallucinate code evidence or silently drop unverified findings.
+**Problem:** Standard LLMs can hallucinate code snippets or drop findings when full context isn't available.
 
-**Solution:** Grounding is strictly enforced against retrieved source code:
-- **Verbatim `quoted_code` Verification**: `is_finding_grounded` verifies quoted snippets against retrieved file contents (fail-closed: empty quotes return `False`).
-- **Auto-Fetch Recovery**: If grounding fails, Lokr automatically pulls full source into state and retries analysis (capped at 2 retries).
-- **Explicit Marking**: Findings that fail grounding are retained and tagged with `grounded: false` instead of being dropped silently.
-- **Action Context Synchronization**: Auto-fetched source code context is synchronized directly into the Action Agent's input.
+**Solution:** Findings are verified against actual retrieved source:
+- **Snippet Matching**: `is_finding_grounded` checks quoted snippets against retrieved file contents (empty quotes return `False`).
+- **Auto-Fetch Recovery**: If grounding fails due to missing file context, Lokr pulls the file into state and retries analysis (capped at 2 retries).
+- **Explicit Flags**: Findings that fail grounding are kept and tagged with `grounded: false` instead of disappearing silently.
+- **Context Sync**: Auto-fetched source code is passed into the Action Agent's input so patches remain grounded.
 
 ---
 
@@ -766,10 +757,6 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-### Built for the hackathon. Hardened for production.
-
-*Lokr Assistant — because "LGTM" shouldn't be your deployment strategy.*
-
-**Questions?** Open an issue or ping the maintainer.
+**Questions or Feedback?** Open an issue or submit a pull request.
 
 </div>
