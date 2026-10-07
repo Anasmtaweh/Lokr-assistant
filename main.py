@@ -48,37 +48,37 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="qwen2.5-coder:7b",
-        help="The name of the LLM model to use (default: 'qwen2.5-coder:7b')."
+        default=os.environ.get("MODEL", "qwen2.5-coder:7b"),
+        help="The name of the LLM model to use (default: env MODEL or 'qwen2.5-coder:7b')."
     )
     
     parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:11434",
-        help="The base URL of the LLM API (default: 'http://localhost:11434')."
+        default=os.environ.get("API_URL", "http://localhost:11434"),
+        help="The base URL of the LLM API (default: env API_URL or 'http://localhost:11434')."
     )
     
     parser.add_argument(
         "--api-key",
         type=str,
-        default=None,
-        help="API key for OpenAI-compatible endpoints."
+        default=os.environ.get("API_KEY", None),
+        help="API key for OpenAI-compatible endpoints (default: env API_KEY)."
     )
 
     parser.add_argument(
         "--api-type",
         type=str,
-        default="ollama",
+        default=os.environ.get("API_TYPE", "ollama"),
         choices=["ollama", "openai"],
-        help="The API provider type: 'ollama' or 'openai' (default: 'ollama')."
+        help="The API provider type: 'ollama' or 'openai' (default: env API_TYPE or 'ollama')."
     )
 
     parser.add_argument(
         "--project",
         type=str,
-        default=None,
-        help="Path to the project directory to analyze."
+        default=os.environ.get("LOKR_PROJECT_PATH", None),
+        help="Path to the project directory to analyze (default: env LOKR_PROJECT_PATH)."
     )
 
     args = parser.parse_args()

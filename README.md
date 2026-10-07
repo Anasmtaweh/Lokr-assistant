@@ -45,7 +45,11 @@ To properly evaluate this multi-agent architecture, please configure the LLM bac
 
 ## 🎯 What Is Lokr Assistant?
 
-Lokr Assistant: Sentinel 2.0 is a **production-hardened multi-agent AI framework** designed to act as a senior engineering copilot. Unlike generic LLM coding tools that suffer from context bloat and hallucination, Lokr Assistant grounds its decision-making in a localized dependency graph using our custom `lokr` engine.
+**Lokr** is the code search engine — it parses source files with Tree-sitter, builds a call graph with NetworkX, and stores embeddings in ChromaDB so queries return only the code that's relevant.
+
+**Lokr Assistant (Sentinel 2.0)** is the multi-agent layer built on top — it uses Lokr's context to diagnose bugs, propose patches, review them for risks, and score deployment safety.
+
+Together, the system acts as an AI engineering copilot. Unlike generic LLM coding tools that suffer from context bloat and hallucination, Lokr Assistant grounds its decision-making in a localized dependency graph using the Lokr engine.
 
 ### ⭐ Hackathon Innovations
 

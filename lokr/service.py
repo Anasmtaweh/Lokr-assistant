@@ -246,6 +246,8 @@ class LokrService:
 
         nid, ndata = candidates[0]
         file_path = ndata.get('file_path', ndata.get('file', ''))
+        if not file_path and "::" in nid:
+            file_path = nid.split("::")[0]
         lineno = ndata.get('lineno', 1)
         end_lineno = ndata.get('end_lineno', lineno + 50)
 

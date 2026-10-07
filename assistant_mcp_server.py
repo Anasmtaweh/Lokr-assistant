@@ -6,6 +6,7 @@ import sys
 import threading
 import uuid
 from pathlib import Path
+from typing import Optional
 
 try:
     from dotenv import load_dotenv
@@ -46,14 +47,15 @@ mcp = FastMCP("Lokr Assistant Pipeline")
 # Global TASKS dictionary to hold background task states
 TASKS = {}
 
-def _run_pipeline_background(task_id: str, user_input: str):
+def _run_pipeline_background(task_id: str, user_input: str, project_path: Optional[str] = None):
     """Background thread function to run the Lokr pipeline and update TASKS."""
     try:
+        target_project = project_path or str(_DEMO_APP_PATH)
         # Redirect stdout to stderr to prevent breaking the MCP JSON-RPC protocol
         with contextlib.redirect_stdout(sys.stderr):
             result = run_assistant(
                 user_input=user_input,
-                project_path=str(_DEMO_APP_PATH),
+                project_path=target_project,
                 model=_MODEL,
                 use_lokr=True,
                 progress_callback=lambda msg: logger.info(f"Progress: {msg}"),
@@ -69,56 +71,59 @@ def _run_pipeline_background(task_id: str, user_input: str):
         TASKS[task_id]["error"] = str(e)
 
 
-def _start_background_task(user_input: str) -> str:
+def _start_background_task(user_input: str, project_path: Optional[str] = None) -> str:
     """Helper to start the background pipeline and return a task_id."""
     task_id = str(uuid.uuid4())
     TASKS[task_id] = {"status": "running"}
-    thread = threading.Thread(target=_run_pipeline_background, args=(task_id, user_input))
+    thread = threading.Thread(target=_run_pipeline_background, args=(task_id, user_input, project_path))
     thread.daemon = True
     thread.start()
     return json.dumps({"task_id": task_id, "status": "running"})
 
 
 @mcp.tool()
-def run_repair(issue_description: str, target_file: str = "") -> str:
+def run_repair(issue_description: str, target_file: str = "", project_path: str = "") -> str:
     """
     Run the Lokr Assistant pipeline in Repair mode to diagnose and fix a bug/vulnerability.
     This tool returns immediately with a task_id. You must use the check_task tool to poll for the actual result.
     
     Args:
         issue_description (str): Description of the bug, unexpected behavior, or security issue.
-        target_file (str, optional): A target file path relative to lokr-demo-app to focus on.
+        target_file (str, optional): A target file path relative to the project to focus on.
+        project_path (str, optional): Path to the target project directory. Defaults to configured demo app.
     """
     user_input = f"Repair this issue:\n{issue_description}"
     if target_file:
         user_input += f"\nRelevant file: {target_file}"
-    return _start_background_task(user_input)
+    return _start_background_task(user_input, project_path=project_path or None)
 
 
 @mcp.tool()
-def run_review(diff_content: str) -> str:
+def run_review(diff_content: str, project_path: str = "") -> str:
     """
     Run the Lokr Assistant pipeline in Review mode to analyze a code diff.
     This tool returns immediately with a task_id. You must use the check_task tool to poll for the actual result.
     
     Args:
         diff_content (str): The code diff to review (unified diff format).
+        project_path (str, optional): Path to the target project directory. Defaults to configured demo app.
     """
     user_input = f"Review this diff:\n{diff_content}"
-    return _start_background_task(user_input)
+    return _start_background_task(user_input, project_path=project_path or None)
 
 
 @mcp.tool()
-def run_prevent(changes_summary: str) -> str:
+def run_prevent(changes_summary: str, project_path: str = "") -> str:
     """
     Run the Lokr Assistant pipeline in Prevent mode to determine if changes are safe to deploy.
     This tool returns immediately with a task_id. You must use the check_task tool to poll for the actual result.
     
     Args:
         changes_summary (str): A summary of the changes or diff to check for deployment readiness.
+        project_path (str, optional): Path to the target project directory. Defaults to configured demo app.
     """
     user_input = f"Check if this change is safe to deploy:\n{changes_summary}"
-    return _start_background_task(user_input)
+    return _start_background_task(user_input, project_path=project_path or None)
 
 
 @mcp.tool()
