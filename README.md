@@ -304,15 +304,15 @@ Analyzer: [re-analyzes with new context, produces grounded diagnosis]
 
 ### 2. Safety → Action Fast-Path Revision
 
-**Problem:** When Safety rejects a patch, the entire pipeline restarts (2x cost).
+**Problem:** When Safety rejects a patch, restarting the entire pipeline forces the Analyzer to run again unnecessarily.
 
-**Solution:** Safety provides `revision_suggestions`; Action revises directly.
+**Solution:** Safety provides `revision_suggestions`; Action revises directly, which avoids re-running the analyzer.
 
 ```
-BEFORE (2x cost):
+BEFORE (full pipeline restart):
 Safety rejects → Analyzer re-analyzes → Action re-patches → Safety re-checks
 
-AFTER (0.3x cost):
+AFTER (avoids re-running the analyzer):
 Safety rejects (with suggestions) → Action revises → Safety re-checks
 ```
 
@@ -377,13 +377,13 @@ state["error"] = "ANALYZER_VALIDATION_ERROR: Missing required field: contributio
 | Decision | Rationale | Impact |
 |----------|-----------|--------|
 | **Minimal Context Injection** | Analyzer starts with bug report + entry points instead of full code dump | Focused context, fewer hallucinations |
-| **Deterministic Pre-Scan** | Regex catches CAT-0 patterns before LLM | Can't hallucinate away security issues |
+| **Deterministic Pre-Scan** | Regex catches CAT-0 patterns before LLM | Catches known backdoor patterns before the LLM runs |
 | **Fail-Loud Agents** | Agents raise `ValueError` on malformed output | No silent degradation to stubs |
-| **Safety → Action Fast-Path** | Targeted revisions skip Analyzer | Avoids redundant pipeline restarts |
+| **Safety → Action Fast-Path** | Targeted revisions skip Analyzer | Avoids re-running the analyzer |
 | **Token-Based Evidence** | Meaningful code tokens instead of substrings | Handles LLM abbreviations correctly |
 | **Cascading Skepticism** | Each agent distrusts unverified claims | Grounded findings only |
 | **Cross-Referencing** | Action reads both Analyzer + raw input | Catches dropped evidence |
-| **Automatic Blockers** | Security conditions hardcoded (LLM can't override) | Prevents rubber-stamping |
+| **Automatic Blockers** | Hardcoded checks for removed auth middleware, missing DB migrations, FIXME warnings, and failing CI tests | Enforces deterministic blocker checks independent of LLM output |
 | **LLM + Fast-Path Classification** | Keywords + LLM tiebreaker | Instant intent detection |
 | **Progress Callbacks** | Real-time `st.status` updates | Transparent pipeline |
 
@@ -425,7 +425,7 @@ state["error"] = "ANALYZER_VALIDATION_ERROR: Missing required field: contributio
 **Input:**
 > *"We updated the README and tweaked some CSS. Can I deploy this?"*
 
-**Expected Result:** 
+**Example output:** 
 ```
 ✅ SAFE_TO_DEPLOY
 Readiness: 100% | Risk: LOW
@@ -439,7 +439,7 @@ No blockers detected
 **Input:**
 > *"Can I deploy? I changed auth.js, admin.js, and User.js. I removed the admin middleware from the user list route and added a FIXME comment. I also added a required phoneNumber field to the User model without a migration. CI is showing one failing test."*
 
-**Expected Result:** 
+**Example output:** 
 ```
 🚫 NO_GO_FIX_BLOCKERS
 Readiness: 35% | Risk: CRITICAL
@@ -465,8 +465,8 @@ Blockers:
   [PRESCAN-002] Hardcoded Role Escalation in src/middleware/auth.js:11
 ```
 
-**Expected Result:** 
-Analyzer is forced to include these CAT-0 findings in its diagnosis, ensuring the backdoor is addressed in the patch.
+**Example output:** 
+Pre-scan findings are injected into the Analyzer context so the backdoor is included in the diagnosis and patch.
 
 ```
 🐛 BUG DIAGNOSIS
@@ -500,7 +500,7 @@ Patch: Add ownership validation + remove debug header
      }
 ```
 
-**Expected Result:** 
+**Example output:** 
 ```
 ⚠️ REQUEST_CHANGES
 Risk: HIGH
@@ -517,6 +517,19 @@ This means unauthorized users can now pass if they're not an admin
 Recommendation:
 Revert the operator change, or add explicit role checks.
 ```
+
+---
+
+## Real-World Use
+
+I pointed Lokr Assistant at an unrelated app (a `JOB-Help` backend) where corrupted PDF/DOCX uploads caused an unhandled `500` error. Lokr diagnosed the missing exception handling around document parsing; the generated patch wrapped the parsing in a `try/except` block returning a `400` response, along with two regression tests. Because the agents do not edit files directly, I applied and tested the patch manually.
+
+---
+
+## Known Limitations
+
+- **Incomplete adjacent-route coverage:** The analyzer can miss an identical issue in an adjacent route even when it diagnoses the primary endpoint.
+- **Approximate diff generation:** Generated diffs may not match the real file line-for-line, so patches require manual review before applying.
 
 ---
 
@@ -587,7 +600,7 @@ Intent Classifier (keywords + LLM)
     │              │      │
     │              ↓      ↓
     │          [Action]  [Analyzer]
-    │          (0.3x)    (fallback)
+    │          (avoids re-running the analyzer)
     │              │
     └──────┬───────┘
            ↓
@@ -608,7 +621,7 @@ Intent Classifier (keywords + LLM)
 | **Pre-Scan** | Deterministic regex scan for backdoors | Runs before LLM; findings are injected as mandatory context |
 | **Analyzer** | Diagnoses issues, assesses readiness | Starts with minimal context; requests more via `lokr_requests`; raises `ValueError` on schema failure |
 | **Action** | Generates fixes / identifies blockers | Reads safety feedback for targeted revisions; cross-references raw user input |
-| **Safety** | Risk scoring, go/no-go decision | Provides `revision_suggestions` for fast-path Action revision; can't rubber-stamp |
+| **Safety** | Risk scoring, go/no-go decision | Provides `revision_suggestions` for fast-path Action revision; applies hardcoded blocker checks (removed auth middleware, missing DB migrations, FIXME warnings, failing CI tests) |
 | **Validator** | Validates fixes, generates checklists | Triggers revision loop on failure |
 
 ---
@@ -623,7 +636,7 @@ Intent Classifier (keywords + LLM)
 | **Loop Detection** | Safety↔Action: 3 iterations. Main: 25 iterations | Prevents infinite loops |
 | **Token Budget** | Forensic logging warns if analyzer input > 8k tokens | Early warning of context bloat |
 | **Context Growth Tracking** | `[FORENSIC]` logs track token delta per Lokr request | Visible efficiency gains |
-| **Hard Blockers** | Security conditions hardcoded (auth removal, DB migrations) | LLM can't rubber-stamp |
+| **Hard Blockers** | Hardcoded checks for removed auth middleware, missing DB migrations, FIXME warnings, and failing CI tests | Enforces deterministic blocker checks independent of LLM output |
 
 ---
 
@@ -745,7 +758,7 @@ Exposes `run_repair`, `run_review`, `run_prevent`, and `check_task` tools over M
   - **Vector Search:** ChromaDB (Semantic node retrieval)
   - **Graph Engine:** NetworkX (Dependency graph + topological sorting)
 - **UI:** [Streamlit](https://streamlit.io) with real-time progress tracking
-- **Language:** Python 3.8+
+- **Language:** Python 3.10+
 
 ---
 
